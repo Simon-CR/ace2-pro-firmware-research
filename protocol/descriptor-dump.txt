@@ -1,0 +1,417 @@
+ACE2 Pro V1.1.31 - nanopb descriptor recovery
+image: ex/ACE2_V1.1.31_20260306.bin  base 0x08008000  end 0x080197a8
+generic dispatcher: 0x08009C5C   registrar: 0x0800B7A4
+static triple table: 0x08018C5C .. 0x08018D93 (26 x 12 bytes)
+RAM triple slots  : 0x20000E70/E7C/E88 and 0x20000FA4/FB0/FBC/FC8 (7 x 12 bytes)
+
+== COMMAND TABLE ==
+cmd  name                   triple     req_desc   resp_desc  handler    req -> resp
+0    DISCOVER_DEVICE        0x08018cbc 0x0801907c 0x08018e4c 0x0800b9ce Empty -> DiscoverDeviceResponse
+1    ASSIGN_DEVICE_ID       0x08018cc8 0x08018dc8 0x080190a4 0x0800b9e6 AssignDeviceIdRequest -> GenericResponse
+2    IAP_UPGRADE            0x08018d10 0x080194e4 0x080190a4 0x0800d4e4 UpgradeRequest -> GenericResponse
+3    IAP_FIRMWARE           0x08018d28 0x0801901c 0x080190a4 0x0800d564 FirmwareRequest -> GenericResponse
+4    IAP_UPGRADE_FINISH     0x08018d34 0x0801907c 0x080190a4 0x0800d5c4 Empty -> GenericResponse
+5    IAP_VERSION            0x08018d1c 0x0801907c 0x08019148 0x0800d528 Empty -> InfoResponse
+6    GET_STATUS             0x08018cb0 0x0801907c 0x08019424 0x0800b840 Empty -> StatusResponse
+7    GET_INFO               0x08018ca4 0x0801907c 0x08019148 0x0800b7f2 Empty -> InfoResponse
+8    FEED_OR_ROLLBACK       0x08018c8c 0x08018f78 0x080190a4 0x0800b578 FeedOrRollbackRequest -> GenericResponse
+9    STOP_FEED_OR_ROLLBACK  0x08018c98 0x08019454 0x080190a4 0x0800b644 StopFeedOrRollbackRequest -> GenericResponse
+10   UPDATE_SPEED           0x08018c68 0x080194b0 0x080190a4 0x0800b4a0 UpdateSpeedRequest -> GenericResponse
+11   DRYING                 0x08018cd4 0x08018eb0 0x080190a4 0x0800bd1c DryingRequest -> GenericResponse
+12   SET_DRY_TEMP           0x08018cec 0x080192a0 0x080190a4 0x0800bdf6 SetDryTempRequest -> GenericResponse
+13   GET_RFID_CACHE         0x08018d7c 0x08019250 0x08018fe0 0x0800e910 RfidRequest -> FilamentInfoResponse
+14   SET_RFID_ENABLE        0x08018d64 0x0801937c 0x080190a4 0x0800e74c SetRfidEnableRequest -> GenericResponse
+15   LINEAR_KEY_CALIBRATE   0x20000e88 0x0801919c 0x080190a4 0x0800fc98 LinearCalibrationRequest -> GenericResponse
+16   GET_MATERIAL_INFO      0x08018d4c 0x080191f4 0x08019224 0x0800da30 GetMaterialInfoRequest -> GetMaterialInfoResponse
+17   SET_SLOT_STATUS        0x08018d58 0x08019510 0x080190a4 0x0800db44 SetSlotStatusRequest -> GenericResponse
+18   SET_MATERIAL_NAME      0x08018d40 0x08019540 0x080190a4 0x0800dae2 SetMaterialNameRequest -> GenericResponse
+19   SET_FEED_CHECK         0x08018c80 0x080192fc 0x080190a4 0x0800b3ac SetFeedCheckRequest -> GenericResponse
+20   SET_PRINTER_STATUS     0x08018d88 0x08019350 0x080190a4 0x0800e9ea SetPrinterStatusRequest -> GenericResponse
+64   GET_TEMP               0x08018ce0 0x0801907c 0x080190e4 0x0800bd7e Empty -> GetTempResponse
+65   SET_DRY_POWER          0x08018d04 0x08019278 0x080190a4 0x0800be9c SetDryPowerRequest -> GenericResponse
+66   SET_VALVE              0x20000fbc 0x080193a8 0x080190a4 0x08010170 SetValveRequest -> GenericResponse
+68   GET_FILAMENT_INFO      0x08018d70 0x08019250 0x08018fe0 0x0800e7a8 RfidRequest -> FilamentInfoResponse
+70   FLASH_LED              0x20000fb0 0x08019058 0x080190a4 0x080101ec FlashLedRequest -> GenericResponse
+71   SET_FAN                0x20000fa4 0x080192d0 0x080190a4 0x08010038 SetFanRequest -> GenericResponse
+72   MOTOR_MOVE(?)          0x20000fc8 0x08019328 0x080190a4 0x08010004 Cmd72Request -> GenericResponse
+73   GET_SENSOR_STATE       0x20000e70 0x0801907c 0x08019170 0x0800fc4c Empty -> GetSensorStateResponse
+75   DRY_CMD                0x08018cf8 0x080192a0 0x080190a4 0x0800be0a SetDryTempRequest -> GenericResponse
+76   GET_FEED_INFO          0x08018c74 0x0801907c 0x08018f10 0x0800b2d8 Empty -> FeedInfoResponse
+77   MOTOR_TEST             0x08018c5c 0x08018f78 0x080190a4 0x0800b400 FeedOrRollbackRequest -> GenericResponse
+78   GET_MOTOR_STATUS(?)    0x20000e7c 0x0801907c 0x080191c8 0x0800fd5c Empty -> Cmd78Response
+
+  thunk addresses (each passes its triple to 0x08009C5C):
+    cmd 0   thunk 0x0800fade  registered at 0x00008014 (obj)
+    cmd 1   thunk 0x0800fafa  registered at 0x00000000 (obj)
+    cmd 2   thunk 0x0800fbda  registered at 0x08013fe4 (reg)
+    cmd 3   thunk 0x0800fbf6  registered at 0x08013ff2 (reg)
+    cmd 4   thunk 0x0800fc12  registered at 0x08014000 (reg)
+    cmd 5   thunk 0x0800fc2e  registered at 0x0801400e (reg)
+    cmd 6   thunk 0x0800fb16  registered at 0x00000000 (obj)
+    cmd 7   thunk 0x0800fb32  registered at 0x00000000 (obj)
+    cmd 8   thunk 0x0800fa36  registered at 0x08015836 (reg)
+    cmd 9   thunk 0x0800fa52  registered at 0x08015844 (reg)
+    cmd 10  thunk 0x0800fa6e  registered at 0x08015852 (reg)
+    cmd 11  thunk 0x0800fb4e  registered at 0x0800c358 (reg)
+    cmd 12  thunk 0x0800fb86  registered at 0x0800c374 (reg)
+    cmd 13  thunk 0x0800fec8  registered at 0x0800ea7c (reg)
+    cmd 14  thunk 0x0800fee4  registered at 0x0800ea8a (reg)
+    cmd 15  thunk 0x0800fd40  registered at 0x08015ad4 (reg)
+    cmd 16  thunk 0x0800fda6  registered at 0x08015b9a (reg)
+    cmd 17  thunk 0x0800fdde  registered at 0x08015bb6 (reg)
+    cmd 18  thunk 0x0800fdc2  registered at 0x08015ba8 (reg)
+    cmd 19  thunk 0x0800faa6  registered at 0x0801586e (reg)
+    cmd 20  thunk 0x0800ff00  registered at 0x0800ea98 (reg)
+    cmd 64  thunk 0x0800fb6a  registered at 0x0800c366 (reg)
+    cmd 65  thunk 0x0800fbbe  registered at 0x0800c390 (reg)
+    cmd 66  thunk 0x080101ce  registered at 0x08015a1c (reg)
+    cmd 68  thunk 0x0800feac  registered at 0x0800ea6e (reg)
+    cmd 70  thunk 0x0801025c  registered at 0x08015a3e (reg)
+    cmd 71  thunk 0x08010154  registered at 0x080159fa (reg)
+    cmd 72  thunk 0x0801001a  registered at 0x080159d8 (reg)
+    cmd 73  thunk 0x0800fc7c  registered at 0x08015ab2 (reg)
+    cmd 75  thunk 0x0800fba2  registered at 0x0800c382 (reg)
+    cmd 76  thunk 0x0800fa8a  registered at 0x08015860 (reg)
+    cmd 77  thunk 0x0800fac2  registered at 0x0801587c (reg)
+    cmd 78  thunk 0x0800fd8a  registered at 0x08015af6 (reg)
+
+== DECODED MESSAGE DESCRIPTORS (40) ==
+
+AssignDeviceIdRequest  @0x08018dc8
+  msgdesc words: field_info=0x08018db4 submsg_info=0x08018de4 default=0x00000000 cb=0x00000000 field_count=4 required=0 largest_tag=4
+    [0x08018db4] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=uid1
+              raw words: 40001204
+    [0x08018db8] tag=2   UVARINT            sing  off=0x04 size=4    proto=uint32  name=uid2
+              raw words: 40041208
+    [0x08018dbc] tag=3   UVARINT            sing  off=0x08 size=4    proto=uint32  name=uid3
+              raw words: 4008120c
+    [0x08018dc0] tag=4   UVARINT            sing  off=0x0c size=4    proto=uint32  name=device_id
+              raw words: 400c1210
+
+Cmd78Entry  @0x08018df4
+  msgdesc words: field_info=0x08018de8 submsg_info=0x08018e10 default=0x00000000 cb=0x00000000 field_count=2 required=0 largest_tag=2
+    [0x08018de8] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=value_a
+              raw words: 40001204
+    [0x08018dec] tag=2   UVARINT            sing  off=0x04 size=4    proto=uint32  name=value_b
+              raw words: 40041208
+
+ColorInfo  @0x08018e1c
+  msgdesc words: field_info=0x08018e14 submsg_info=0x08018e38 default=0x00000000 cb=0x00000000 field_count=1 required=0 largest_tag=1
+    [0x08018e14] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=rgba
+              raw words: 40001204
+
+DiscoverDeviceResponse  @0x08018e4c
+  msgdesc words: field_info=0x08018e3c submsg_info=0x08018e68 default=0x00000000 cb=0x00000000 field_count=3 required=0 largest_tag=3
+    [0x08018e3c] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=uid1
+              raw words: 40001204
+    [0x08018e40] tag=2   UVARINT            sing  off=0x04 size=4    proto=uint32  name=uid2
+              raw words: 40041208
+    [0x08018e44] tag=3   UVARINT            sing  off=0x08 size=4    proto=uint32  name=uid3
+              raw words: 4008120c
+
+DryStatus  @0x08018e80
+  msgdesc words: field_info=0x08018e6c submsg_info=0x08018e9c default=0x00000000 cb=0x00000000 field_count=4 required=0 largest_tag=4
+    [0x08018e6c] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=status
+              raw words: 40001204
+    [0x08018e70] tag=2   UVARINT            sing  off=0x04 size=4    proto=uint32  name=target_temp
+              raw words: 40041208
+    [0x08018e74] tag=3   UVARINT            sing  off=0x08 size=4    proto=uint32  name=duration
+              raw words: 4008120c
+    [0x08018e78] tag=4   UVARINT            sing  off=0x0c size=4    proto=uint32  name=remain_time
+              raw words: 400c1210
+
+DryingRequest  @0x08018eb0
+  msgdesc words: field_info=0x08018ea0 submsg_info=0x08018ecc default=0x00000000 cb=0x00000000 field_count=3 required=0 largest_tag=3
+    [0x08018ea0] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=temp
+              raw words: 40001204
+    [0x08018ea4] tag=2   UVARINT            sing  off=0x04 size=4    proto=uint32  name=duration
+              raw words: 40041208
+    [0x08018ea8] tag=3   BOOL               sing  off=0x08 size=1    proto=bool  name=auto_roll
+              raw words: 1008100c
+
+ExtruderTemp  @0x08018ee4
+  msgdesc words: field_info=0x08018ed0 submsg_info=0x08018f00 default=0x00000000 cb=0x00000000 field_count=4 required=0 largest_tag=4
+    [0x08018ed0] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=min_temp
+              raw words: 40001204
+    [0x08018ed4] tag=2   UVARINT            sing  off=0x04 size=4    proto=uint32  name=max_temp
+              raw words: 40041208
+    [0x08018ed8] tag=3   UVARINT            sing  off=0x08 size=4    proto=uint32  name=min_speed
+              raw words: 4008120c
+    [0x08018edc] tag=4   UVARINT            sing  off=0x0c size=4    proto=uint32  name=max_speed
+              raw words: 400c1210
+
+FeedInfoResponse  @0x08018f10
+  msgdesc words: field_info=0x08018f04 submsg_info=0x08018f2c default=0x00000000 cb=0x00000000 field_count=1 required=0 largest_tag=1
+  submsg_info[] = 0x08018f44 (FeedInfo)
+    [0x08018f04] tag=1   SUBMESSAGE         rep   off=0x04 size=12  arr=4 soff=4  proto=repeated FeedInfo  name=feed_info
+              raw words: 40042805 000c0004
+
+FeedInfo  @0x08018f44
+  msgdesc words: field_info=0x08018f34 submsg_info=0x08018f60 default=0x00000000 cb=0x00000000 field_count=3 required=0 largest_tag=3
+    [0x08018f34] tag=1   VARINT             sing  off=0x00 size=4    proto=int32  name=steps
+              raw words: 40001104
+    [0x08018f38] tag=2   VARINT             sing  off=0x04 size=4    proto=int32  name=length
+              raw words: 40041108
+    [0x08018f3c] tag=3   VARINT             sing  off=0x08 size=4    proto=int32  name=decoder
+              raw words: 4008110c
+
+FeedOrRollbackRequest  @0x08018f78
+  msgdesc words: field_info=0x08018f64 submsg_info=0x08018f94 default=0x00000000 cb=0x00000000 field_count=4 required=0 largest_tag=4
+    [0x08018f64] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=index
+              raw words: 40001204
+    [0x08018f68] tag=2   UVARINT            sing  off=0x04 size=4    proto=uint32  name=speed
+              raw words: 40041208
+    [0x08018f6c] tag=3   UVARINT            sing  off=0x08 size=4    proto=uint32  name=length
+              raw words: 4008120c
+    [0x08018f70] tag=4   UVARINT            sing  off=0x0c size=4    proto=uint32  name=mode
+              raw words: 400c1210
+
+FilamentInfoResponse  @0x08018fe0
+  msgdesc words: field_info=0x08018f98 submsg_info=0x08018ffc default=0x00000000 cb=0x00000000 field_count=12 required=0 largest_tag=12
+  submsg_info[] = 0x08018e1c (ColorInfo), 0x08018ee4 (ExtruderTemp), 0x08019110 (HotbedTemp)
+    [0x08018f98] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=index
+              raw words: 40001204
+    [0x08018f9c] tag=2   UVARINT            sing  off=0x04 size=4    proto=uint32  name=version
+              raw words: 40041208
+    [0x08018fa0] tag=3   STRING             sing  off=0x08 size=20   proto=string  name=sku
+              raw words: 0001170d 00140008
+    [0x08018fa8] tag=4   STRING             sing  off=0x1c size=20   proto=string  name=type
+              raw words: 00011711 0014001c
+    [0x08018fb0] tag=5   SUBMESSAGE         rep   off=0x34 size=4   arr=10 soff=4  proto=repeated ColorInfo  name=colors
+              raw words: 400a2815 00040034
+    [0x08018fb8] tag=6   SUBMESSAGE         sing  off=0x60 size=16  soff=4  proto=ExtruderTemp  name=extruder_temp
+              raw words: 40011819 00100060
+    [0x08018fc0] tag=7   SUBMESSAGE         sing  off=0x74 size=8   soff=4  proto=HotbedTemp  name=hotbed_temp
+              raw words: 4001181d 00080074
+    [0x08018fc8] tag=8   UVARINT            sing  off=0x7c size=4    proto=uint32  name=diameter
+              raw words: 407c1220
+    [0x08018fcc] tag=9   UVARINT            sing  off=0x80 size=4    proto=uint32  name=length
+              raw words: 40801224
+    [0x08018fd0] tag=10  UVARINT            sing  off=0x84 size=4    proto=uint32  name=icon_type
+              raw words: 40841228
+    [0x08018fd4] tag=11  UVARINT            sing  off=0x88 size=4    proto=uint32  name=remainder
+              raw words: 4088122c
+    [0x08018fd8] tag=12  UVARINT            sing  off=0x8c size=4    proto=uint32  name=code
+              raw words: 408c1230
+
+FirmwareRequest  @0x0801901c
+  msgdesc words: field_info=0x0801900c submsg_info=0x08019038 default=0x00000000 cb=0x00000000 field_count=2 required=0 largest_tag=2
+    [0x0801900c] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=address
+              raw words: 40001204
+    [0x08019010] tag=2   BYTES              sing  off=0x04 size=68   proto=bytes  name=firmware
+              raw words: 00011609 00440004
+
+FlashLedRequest  @0x08019058
+  msgdesc words: field_info=0x0801903c submsg_info=0x08019074 default=0x00000000 cb=0x00000000 field_count=6 required=0 largest_tag=6
+    [0x0801903c] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=components
+              raw words: 40001204
+    [0x08019040] tag=2   UVARINT            sing  off=0x04 size=4    proto=uint32  name=loop
+              raw words: 40041208
+    [0x08019044] tag=3   UVARINT            sing  off=0x08 size=4    proto=uint32  name=quick1
+              raw words: 4008120c
+    [0x08019048] tag=4   UVARINT            sing  off=0x0c size=4    proto=uint32  name=slow1
+              raw words: 400c1210
+    [0x0801904c] tag=5   UVARINT            sing  off=0x10 size=4    proto=uint32  name=quick2
+              raw words: 40101214
+    [0x08019050] tag=6   UVARINT            sing  off=0x14 size=4    proto=uint32  name=slow2
+              raw words: 40141218
+
+Empty  @0x0801907c
+  msgdesc words: field_info=0x08019078 submsg_info=0x08019098 default=0x00000000 cb=0x00000000 field_count=0 required=0 largest_tag=0
+
+GenericResponse  @0x080190a4
+  msgdesc words: field_info=0x0801909c submsg_info=0x080190c0 default=0x00000000 cb=0x00000000 field_count=1 required=0 largest_tag=1
+    [0x0801909c] tag=1   VARINT             sing  off=0x00 size=4    proto=int32  name=code
+              raw words: 40001104
+
+GetTempResponse  @0x080190e4
+  msgdesc words: field_info=0x080190c4 submsg_info=0x08019100 default=0x00000000 cb=0x00000000 field_count=7 required=0 largest_tag=7
+    [0x080190c4] tag=1   FIXED32            sing  off=0x00 size=4    proto=float  name=unknown1_always_zero
+              raw words: 40001404
+    [0x080190c8] tag=2   FIXED32            sing  off=0x04 size=4    proto=float  name=unknown2_always_zero
+              raw words: 40041408
+    [0x080190cc] tag=3   FIXED32            sing  off=0x08 size=4    proto=float  name=temp_a
+              raw words: 4008140c
+    [0x080190d0] tag=4   FIXED32            sing  off=0x0c size=4    proto=float  name=temp_b
+              raw words: 400c1410
+    [0x080190d4] tag=5   FIXED32            sing  off=0x10 size=4    proto=float  name=temp_c
+              raw words: 40101414
+    [0x080190d8] tag=6   FIXED32            sing  off=0x14 size=4    proto=float  name=temp_d
+              raw words: 40141418
+    [0x080190dc] tag=7   FIXED32            sing  off=0x18 size=4    proto=float  name=temp_e
+              raw words: 4018141c
+
+HotbedTemp  @0x08019110
+  msgdesc words: field_info=0x08019104 submsg_info=0x0801912c default=0x00000000 cb=0x00000000 field_count=2 required=0 largest_tag=2
+    [0x08019104] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=min_temp
+              raw words: 40001204
+    [0x08019108] tag=2   UVARINT            sing  off=0x04 size=4    proto=uint32  name=max_temp
+              raw words: 40041208
+
+InfoResponse  @0x08019148
+  msgdesc words: field_info=0x08019130 submsg_info=0x08019164 default=0x00000000 cb=0x00000000 field_count=3 required=0 largest_tag=3
+    [0x08019130] tag=1   STRING             sing  off=0x00 size=12   proto=string  name=version
+              raw words: 00011705 000c0000
+    [0x08019138] tag=2   STRING             sing  off=0x0c size=12   proto=string  name=boot_version
+              raw words: 00011709 000c000c
+    [0x08019140] tag=3   BOOL               sing  off=0x18 size=1    proto=bool  name=first_request
+              raw words: 1018100c
+
+GetSensorStateResponse  @0x08019170
+  msgdesc words: field_info=0x08019168 submsg_info=0x0801918c default=0x00000000 cb=0x00000000 field_count=1 required=0 largest_tag=1
+    [0x08019168] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=state
+              raw words: 40001204
+
+LinearCalibrationRequest  @0x0801919c
+  msgdesc words: field_info=0x08019190 submsg_info=0x080191b8 default=0x00000000 cb=0x00000000 field_count=2 required=0 largest_tag=2
+    [0x08019190] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=id
+              raw words: 40001204
+    [0x08019194] tag=2   UVARINT            sing  off=0x04 size=4    proto=uint32  name=type
+              raw words: 40041208
+
+Cmd78Response  @0x080191c8
+  msgdesc words: field_info=0x080191bc submsg_info=0x080191e4 default=0x00000000 cb=0x00000000 field_count=1 required=0 largest_tag=1
+  submsg_info[] = 0x08018df4 (Cmd78Entry)
+    [0x080191bc] tag=1   SUBMESSAGE         rep   off=0x04 size=8   arr=16 soff=4  proto=repeated Cmd78Entry  name=entries
+              raw words: 40102805 00080004
+
+GetMaterialInfoRequest  @0x080191f4
+  msgdesc words: field_info=0x080191ec submsg_info=0x08019210 default=0x00000000 cb=0x00000000 field_count=1 required=0 largest_tag=1
+    [0x080191ec] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=index
+              raw words: 40001204
+
+GetMaterialInfoResponse  @0x08019224
+  msgdesc words: field_info=0x08019214 submsg_info=0x08019240 default=0x00000000 cb=0x00000000 field_count=2 required=0 largest_tag=2
+  submsg_info[] = 0x08019484 (MaterialInfo)
+    [0x08019214] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=index
+              raw words: 40001204
+    [0x08019218] tag=2   SUBMESSAGE         sing  off=0x08 size=28  soff=4  proto=MaterialInfo  name=info
+              raw words: 40011809 001c0008
+
+RfidRequest  @0x08019250
+  msgdesc words: field_info=0x08019248 submsg_info=0x0801926c default=0x00000000 cb=0x00000000 field_count=1 required=0 largest_tag=1
+    [0x08019248] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=index
+              raw words: 40001204
+
+SetDryPowerRequest  @0x08019278
+  msgdesc words: field_info=0x08019270 submsg_info=0x08019294 default=0x00000000 cb=0x00000000 field_count=1 required=0 largest_tag=1
+    [0x08019270] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=power
+              raw words: 40001204
+
+SetDryTempRequest  @0x080192a0
+  msgdesc words: field_info=0x08019298 submsg_info=0x080192bc default=0x00000000 cb=0x00000000 field_count=1 required=0 largest_tag=1
+    [0x08019298] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=temp
+              raw words: 40001204
+
+SetFanRequest  @0x080192d0
+  msgdesc words: field_info=0x080192c0 submsg_info=0x080192ec default=0x00000000 cb=0x00000000 field_count=3 required=0 largest_tag=3
+    [0x080192c0] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=speed
+              raw words: 40001204
+    [0x080192c4] tag=2   BOOL               sing  off=0x04 size=1    proto=bool  name=fan1
+              raw words: 10041008
+    [0x080192c8] tag=3   BOOL               sing  off=0x05 size=1    proto=bool  name=fan2
+              raw words: 1005100c
+
+SetFeedCheckRequest  @0x080192fc
+  msgdesc words: field_info=0x080192f0 submsg_info=0x08019318 default=0x00000000 cb=0x00000000 field_count=2 required=0 largest_tag=2
+    [0x080192f0] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=check_length
+              raw words: 40001204
+    [0x080192f4] tag=2   UVARINT            sing  off=0x04 size=4    proto=uint32  name=error_length
+              raw words: 40041208
+
+Cmd72Request  @0x08019328
+  msgdesc words: field_info=0x0801931c submsg_info=0x08019344 default=0x00000000 cb=0x00000000 field_count=2 required=0 largest_tag=2
+    [0x0801931c] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=components
+              raw words: 40001204
+    [0x08019320] tag=2   UVARINT            sing  off=0x04 size=4    proto=uint32  name=state
+              raw words: 40041208
+
+SetPrinterStatusRequest  @0x08019350
+  msgdesc words: field_info=0x08019348 submsg_info=0x0801936c default=0x00000000 cb=0x00000000 field_count=1 required=0 largest_tag=1
+    [0x08019348] tag=1   BOOL               sing  off=0x00 size=1    proto=bool  name=status
+              raw words: 10001004
+
+SetRfidEnableRequest  @0x0801937c
+  msgdesc words: field_info=0x08019370 submsg_info=0x08019398 default=0x00000000 cb=0x00000000 field_count=2 required=0 largest_tag=2
+    [0x08019370] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=index
+              raw words: 40001204
+    [0x08019374] tag=2   BOOL               sing  off=0x04 size=1    proto=bool  name=enable
+              raw words: 10041008
+
+SetValveRequest  @0x080193a8
+  msgdesc words: field_info=0x0801939c submsg_info=0x080193c4 default=0x00000000 cb=0x00000000 field_count=2 required=0 largest_tag=2
+    [0x0801939c] tag=1   BOOL               sing  off=0x00 size=1    proto=bool  name=valve1
+              raw words: 10001004
+    [0x080193a0] tag=2   BOOL               sing  off=0x01 size=1    proto=bool  name=valve2
+              raw words: 10011008
+
+SlotStatus  @0x080193d4
+  msgdesc words: field_info=0x080193c8 submsg_info=0x080193f0 default=0x00000000 cb=0x00000000 field_count=2 required=0 largest_tag=2
+    [0x080193c8] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=status
+              raw words: 40001204
+    [0x080193cc] tag=2   UVARINT            sing  off=0x04 size=4    proto=uint32  name=filament
+              raw words: 40041208
+
+StatusResponse  @0x08019424
+  msgdesc words: field_info=0x080193f4 submsg_info=0x08019440 default=0x00000000 cb=0x00000000 field_count=9 required=0 largest_tag=9
+  submsg_info[] = 0x08018e80 (DryStatus), 0x080193d4 (SlotStatus)
+    [0x080193f4] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=status
+              raw words: 40001204
+    [0x080193f8] tag=2   SUBMESSAGE         sing  off=0x08 size=16  soff=4  proto=DryStatus  name=dry_status
+              raw words: 40011809 00100008
+    [0x08019400] tag=3   VARINT             sing  off=0x18 size=4    proto=int32  name=temp
+              raw words: 4018110c
+    [0x08019404] tag=4   UVARINT            sing  off=0x1c size=4    proto=uint32  name=humidity
+              raw words: 401c1210
+    [0x08019408] tag=5   BOOL               sing  off=0x20 size=1    proto=bool  name=rfid1_enable
+              raw words: 10201014
+    [0x0801940c] tag=6   BOOL               sing  off=0x21 size=1    proto=bool  name=rfid2_enable
+              raw words: 10211018
+    [0x08019410] tag=7   UVARINT            sing  off=0x24 size=4    proto=uint32  name=feed_assist_count
+              raw words: 4024121c
+    [0x08019414] tag=8   UVARINT            sing  off=0x28 size=4    proto=uint32  name=cont_assist_time
+              raw words: 40281220
+    [0x08019418] tag=9   SUBMESSAGE         rep   off=0x30 size=8   arr=4 soff=4  proto=repeated SlotStatus  name=slot_status
+              raw words: 40042825 00080030
+
+StopFeedOrRollbackRequest  @0x08019454
+  msgdesc words: field_info=0x0801944c submsg_info=0x08019470 default=0x00000000 cb=0x00000000 field_count=1 required=0 largest_tag=1
+    [0x0801944c] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=index
+              raw words: 40001204
+
+MaterialInfo  @0x08019484
+  msgdesc words: field_info=0x08019474 submsg_info=0x080194a0 default=0x00000000 cb=0x00000000 field_count=2 required=0 largest_tag=2
+    [0x08019474] tag=1   STRING             sing  off=0x00 size=22   proto=string  name=name
+              raw words: 00011705 00160000
+    [0x0801947c] tag=2   UVARINT            sing  off=0x18 size=4    proto=uint32  name=code
+              raw words: 40181208
+
+UpdateSpeedRequest  @0x080194b0
+  msgdesc words: field_info=0x080194a4 submsg_info=0x080194cc default=0x00000000 cb=0x00000000 field_count=2 required=0 largest_tag=2
+    [0x080194a4] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=index
+              raw words: 40001204
+    [0x080194a8] tag=2   UVARINT            sing  off=0x04 size=4    proto=uint32  name=speed
+              raw words: 40041208
+
+UpgradeRequest  @0x080194e4
+  msgdesc words: field_info=0x080194d0 submsg_info=0x08019500 default=0x00000000 cb=0x00000000 field_count=3 required=0 largest_tag=3
+    [0x080194d0] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=size
+              raw words: 40001204
+    [0x080194d4] tag=2   UVARINT            sing  off=0x04 size=4    proto=uint32  name=crc
+              raw words: 40041208
+    [0x080194d8] tag=3   STRING             sing  off=0x08 size=12   proto=string  name=version
+              raw words: 0001170d 000c0008
+
+SetSlotStatusRequest  @0x08019510
+  msgdesc words: field_info=0x08019504 submsg_info=0x0801952c default=0x00000000 cb=0x00000000 field_count=2 required=0 largest_tag=2
+    [0x08019504] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=index
+              raw words: 40001204
+    [0x08019508] tag=2   UVARINT            sing  off=0x04 size=4    proto=uint32  name=status
+              raw words: 40041208
+
+SetMaterialNameRequest  @0x08019540
+  msgdesc words: field_info=0x08019530 submsg_info=0x0801955c default=0x00000000 cb=0x00000000 field_count=2 required=0 largest_tag=2
+    [0x08019530] tag=1   UVARINT            sing  off=0x00 size=4    proto=uint32  name=index
+              raw words: 40001204
+    [0x08019534] tag=2   STRING             sing  off=0x04 size=22   proto=string  name=name
+              raw words: 00011709 00160004

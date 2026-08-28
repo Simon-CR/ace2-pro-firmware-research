@@ -1,0 +1,417 @@
+// ============================================================================
+// ACE2 Pro firmware V1.1.31 (20260306) - protobuf wire layout recovered from
+// the DEVICE firmware image (ex/ACE2_V1.1.31_20260306.bin, link base 0x08008000).
+//
+// Descriptor encoding: nanopb 0.4.x.
+//   pb_msgdesc_t = 7 x uint32 { field_info, submsg_info, default_value,
+//                               field_callback, field_count, required_count,
+//                               largest_tag }   (pb_size_t is 32-bit in this build)
+//   field_info   = packed uint32 words, 1/2/4/8-word variants (low 2 bits = format)
+//   emitted layout per message: [field_info + 0][pb_msgdesc_t][submsg_info + NULL]
+//
+// Field NUMBERS / wire types / C sizes / array bounds below are PROVEN from the
+// descriptors. Field NAMES are inherited from hakimio ace2-pro.proto wherever the
+// shape matches; names marked (?) are unproven.
+// ============================================================================
+
+syntax = "proto3";
+package ace_com;
+
+// ---- Commands actually registered by this firmware (33 of them).
+// 67 DRY_TEST, 69 RFID_TEST and 74 SET_KEY_LOG_ENABLE are NOT registered here.
+enum CommandType {
+  // 0   DISCOVER_DEVICE
+  // 1   ASSIGN_DEVICE_ID
+  // 2   IAP_UPGRADE
+  // 3   IAP_FIRMWARE
+  // 4   IAP_UPGRADE_FINISH
+  // 5   IAP_VERSION
+  // 6   GET_STATUS
+  // 7   GET_INFO
+  // 8   FEED_OR_ROLLBACK
+  // 9   STOP_FEED_OR_ROLLBACK
+  // 10  UPDATE_SPEED
+  // 11  DRYING
+  // 12  SET_DRY_TEMP
+  // 13  GET_RFID_CACHE
+  // 14  SET_RFID_ENABLE
+  // 15  LINEAR_KEY_CALIBRATE
+  // 16  GET_MATERIAL_INFO
+  // 17  SET_SLOT_STATUS
+  // 18  SET_MATERIAL_NAME
+  // 19  SET_FEED_CHECK
+  // 20  SET_PRINTER_STATUS
+  // 64  GET_TEMP
+  // 65  SET_DRY_POWER
+  // 66  SET_VALVE
+  // 68  GET_FILAMENT_INFO
+  // 70  FLASH_LED
+  // 71  SET_FAN
+  // 72  MOTOR_MOVE(?)
+  // 73  GET_SENSOR_STATE
+  // 75  DRY_CMD
+  // 76  GET_FEED_INFO
+  // 77  MOTOR_TEST
+  // 78  GET_MOTOR_STATUS(?)
+}
+
+// msgdesc 0x08018dc8  field_info 0x08018db4  fields=4  largest_tag=4  C struct >= 16 bytes
+message AssignDeviceIdRequest {
+  uint32 uid1 = 1;
+  uint32 uid2 = 2;
+  uint32 uid3 = 3;
+  uint32 device_id = 4;
+}
+
+// msgdesc 0x08019328  field_info 0x0801931c  fields=2  largest_tag=2  C struct >= 8 bytes
+message Cmd72Request {
+  uint32 components = 1;
+  uint32 state = 2;
+}
+
+// msgdesc 0x08018df4  field_info 0x08018de8  fields=2  largest_tag=2  C struct >= 8 bytes
+message Cmd78Entry {
+  uint32 value_a = 1;
+  uint32 value_b = 2;
+}
+
+// msgdesc 0x080191c8  field_info 0x080191bc  fields=1  largest_tag=1  C struct >= 12 bytes
+message Cmd78Response {
+  repeated Cmd78Entry entries = 1;  // max_count=16, element 8 bytes
+}
+
+// msgdesc 0x08018e1c  field_info 0x08018e14  fields=1  largest_tag=1  C struct >= 4 bytes
+message ColorInfo {
+  uint32 rgba = 1;
+}
+
+// msgdesc 0x08018e4c  field_info 0x08018e3c  fields=3  largest_tag=3  C struct >= 12 bytes
+message DiscoverDeviceResponse {
+  uint32 uid1 = 1;
+  uint32 uid2 = 2;
+  uint32 uid3 = 3;
+}
+
+// msgdesc 0x08018e80  field_info 0x08018e6c  fields=4  largest_tag=4  C struct >= 16 bytes
+message DryStatus {
+  uint32 status = 1;
+  uint32 target_temp = 2;
+  uint32 duration = 3;
+  uint32 remain_time = 4;
+}
+
+// msgdesc 0x08018eb0  field_info 0x08018ea0  fields=3  largest_tag=3  C struct >= 9 bytes
+message DryingRequest {
+  uint32 temp = 1;
+  uint32 duration = 2;
+  bool auto_roll = 3;
+}
+
+// msgdesc 0x0801907c  field_info 0x08019078  fields=0  largest_tag=0  C struct >= 0 bytes
+message Empty {
+}
+
+// msgdesc 0x08018ee4  field_info 0x08018ed0  fields=4  largest_tag=4  C struct >= 16 bytes
+message ExtruderTemp {
+  uint32 min_temp = 1;
+  uint32 max_temp = 2;
+  uint32 min_speed = 3;
+  uint32 max_speed = 4;
+}
+
+// msgdesc 0x08018f44  field_info 0x08018f34  fields=3  largest_tag=3  C struct >= 12 bytes
+message FeedInfo {
+  int32 steps = 1;
+  int32 length = 2;
+  int32 decoder = 3;
+}
+
+// msgdesc 0x08018f10  field_info 0x08018f04  fields=1  largest_tag=1  C struct >= 16 bytes
+message FeedInfoResponse {
+  repeated FeedInfo feed_info = 1;  // max_count=4, element 12 bytes
+}
+
+// msgdesc 0x08018f78  field_info 0x08018f64  fields=4  largest_tag=4  C struct >= 16 bytes
+message FeedOrRollbackRequest {
+  uint32 index = 1;
+  uint32 speed = 2;
+  uint32 length = 3;
+  uint32 mode = 4;
+}
+
+// msgdesc 0x08018fe0  field_info 0x08018f98  fields=12  largest_tag=12  C struct >= 144 bytes
+message FilamentInfoResponse {
+  uint32 index = 1;
+  uint32 version = 2;
+  string sku = 3;  // char[20] -> max 19 chars
+  string type = 4;  // char[20] -> max 19 chars
+  repeated ColorInfo colors = 5;  // max_count=10, element 4 bytes
+  ExtruderTemp extruder_temp = 6;  // submessage, 16 bytes
+  HotbedTemp hotbed_temp = 7;  // submessage, 8 bytes
+  uint32 diameter = 8;
+  uint32 length = 9;
+  uint32 icon_type = 10;
+  uint32 remainder = 11;
+  uint32 code = 12;
+}
+
+// msgdesc 0x0801901c  field_info 0x0801900c  fields=2  largest_tag=2  C struct >= 72 bytes
+message FirmwareRequest {
+  uint32 address = 1;
+  bytes firmware = 2;  // pb_bytes_array_t[68] -> max 64 bytes
+}
+
+// msgdesc 0x08019058  field_info 0x0801903c  fields=6  largest_tag=6  C struct >= 24 bytes
+message FlashLedRequest {
+  uint32 components = 1;
+  uint32 loop = 2;
+  uint32 quick1 = 3;
+  uint32 slow1 = 4;
+  uint32 quick2 = 5;
+  uint32 slow2 = 6;
+}
+
+// msgdesc 0x080190a4  field_info 0x0801909c  fields=1  largest_tag=1  C struct >= 4 bytes
+message GenericResponse {
+  int32 code = 1;
+}
+
+// msgdesc 0x080191f4  field_info 0x080191ec  fields=1  largest_tag=1  C struct >= 4 bytes
+message GetMaterialInfoRequest {
+  uint32 index = 1;
+}
+
+// msgdesc 0x08019224  field_info 0x08019214  fields=2  largest_tag=2  C struct >= 36 bytes
+message GetMaterialInfoResponse {
+  uint32 index = 1;
+  MaterialInfo info = 2;  // submessage, 28 bytes
+}
+
+// msgdesc 0x08019170  field_info 0x08019168  fields=1  largest_tag=1  C struct >= 4 bytes
+message GetSensorStateResponse {
+  uint32 state = 1;
+}
+
+// msgdesc 0x080190e4  field_info 0x080190c4  fields=7  largest_tag=7  C struct >= 28 bytes
+message GetTempResponse {
+  float unknown1_always_zero = 1;
+  float unknown2_always_zero = 2;
+  float temp_a = 3;
+  float temp_b = 4;
+  float temp_c = 5;
+  float temp_d = 6;
+  float temp_e = 7;
+}
+
+// msgdesc 0x08019110  field_info 0x08019104  fields=2  largest_tag=2  C struct >= 8 bytes
+message HotbedTemp {
+  uint32 min_temp = 1;
+  uint32 max_temp = 2;
+}
+
+// msgdesc 0x08019148  field_info 0x08019130  fields=3  largest_tag=3  C struct >= 25 bytes
+message InfoResponse {
+  string version = 1;  // char[12] -> max 11 chars
+  string boot_version = 2;  // char[12] -> max 11 chars
+  bool first_request = 3;
+}
+
+// msgdesc 0x0801919c  field_info 0x08019190  fields=2  largest_tag=2  C struct >= 8 bytes
+message LinearCalibrationRequest {
+  uint32 id = 1;
+  uint32 type = 2;
+}
+
+// msgdesc 0x08019484  field_info 0x08019474  fields=2  largest_tag=2  C struct >= 28 bytes
+message MaterialInfo {
+  string name = 1;  // char[22] -> max 21 chars
+  uint32 code = 2;
+}
+
+// msgdesc 0x08019250  field_info 0x08019248  fields=1  largest_tag=1  C struct >= 4 bytes
+message RfidRequest {
+  uint32 index = 1;
+}
+
+// msgdesc 0x08019278  field_info 0x08019270  fields=1  largest_tag=1  C struct >= 4 bytes
+message SetDryPowerRequest {
+  uint32 power = 1;
+}
+
+// msgdesc 0x080192a0  field_info 0x08019298  fields=1  largest_tag=1  C struct >= 4 bytes
+message SetDryTempRequest {
+  uint32 temp = 1;
+}
+
+// msgdesc 0x080192d0  field_info 0x080192c0  fields=3  largest_tag=3  C struct >= 6 bytes
+message SetFanRequest {
+  uint32 speed = 1;
+  bool fan1 = 2;
+  bool fan2 = 3;
+}
+
+// msgdesc 0x080192fc  field_info 0x080192f0  fields=2  largest_tag=2  C struct >= 8 bytes
+message SetFeedCheckRequest {
+  uint32 check_length = 1;
+  uint32 error_length = 2;
+}
+
+// msgdesc 0x08019540  field_info 0x08019530  fields=2  largest_tag=2  C struct >= 26 bytes
+message SetMaterialNameRequest {
+  uint32 index = 1;
+  string name = 2;  // char[22] -> max 21 chars
+}
+
+// msgdesc 0x08019350  field_info 0x08019348  fields=1  largest_tag=1  C struct >= 1 bytes
+message SetPrinterStatusRequest {
+  bool status = 1;
+}
+
+// msgdesc 0x0801937c  field_info 0x08019370  fields=2  largest_tag=2  C struct >= 5 bytes
+message SetRfidEnableRequest {
+  uint32 index = 1;
+  bool enable = 2;
+}
+
+// msgdesc 0x08019510  field_info 0x08019504  fields=2  largest_tag=2  C struct >= 8 bytes
+message SetSlotStatusRequest {
+  uint32 index = 1;
+  uint32 status = 2;
+}
+
+// msgdesc 0x080193a8  field_info 0x0801939c  fields=2  largest_tag=2  C struct >= 2 bytes
+message SetValveRequest {
+  bool valve1 = 1;
+  bool valve2 = 2;
+}
+
+// msgdesc 0x080193d4  field_info 0x080193c8  fields=2  largest_tag=2  C struct >= 8 bytes
+message SlotStatus {
+  uint32 status = 1;
+  uint32 filament = 2;
+}
+
+// msgdesc 0x08019424  field_info 0x080193f4  fields=9  largest_tag=9  C struct >= 56 bytes
+message StatusResponse {
+  uint32 status = 1;
+  DryStatus dry_status = 2;  // submessage, 16 bytes
+  int32 temp = 3;
+  uint32 humidity = 4;
+  bool rfid1_enable = 5;
+  bool rfid2_enable = 6;
+  uint32 feed_assist_count = 7;
+  uint32 cont_assist_time = 8;
+  repeated SlotStatus slot_status = 9;  // max_count=4, element 8 bytes
+}
+
+// msgdesc 0x08019454  field_info 0x0801944c  fields=1  largest_tag=1  C struct >= 4 bytes
+message StopFeedOrRollbackRequest {
+  uint32 index = 1;
+}
+
+// msgdesc 0x080194b0  field_info 0x080194a4  fields=2  largest_tag=2  C struct >= 8 bytes
+message UpdateSpeedRequest {
+  uint32 index = 1;
+  uint32 speed = 2;
+}
+
+// msgdesc 0x080194e4  field_info 0x080194d0  fields=3  largest_tag=3  C struct >= 20 bytes
+message UpgradeRequest {
+  uint32 size = 1;
+  uint32 crc = 2;
+  string version = 3;  // char[12] -> max 11 chars
+}
+
+
+
+// ============================================================================
+// DIFF vs hakimio gists/ace2-pro.proto  (that file was reconstructed from the
+// Kobra S1 *printer* gklib FileDescriptorProto; this one from the ACE2 *device*)
+// ============================================================================
+//
+// AGREES exactly (field numbers + wire types + C sizes all match):
+//   GenericRequest(=Empty), GenericResponse, DiscoverDeviceResponse,
+//   AssignDeviceIdRequest, DryStatus, SlotStatus, StatusResponse, InfoResponse,
+//   FeedOrRollbackRequest, StopFeedOrRollbackRequest, UpdateSpeedRequest,
+//   FeedInfo, FeedInfoResponse, SetFeedCheckRequest, ColorInfo, ExtruderTemp,
+//   HotbedTemp, FilamentInfoResponse, RfidRequest, SetRfidEnableRequest,
+//   DryingRequest, SetDryTempRequest, DryCmdRequest, SetDryPowerRequest,
+//   SetValveRequest, UpgradeRequest, FirmwareRequest, FlashLedRequest,
+//   SetFanRequest, GetSensorStateResponse, LinearCalibrationRequest,
+//   GetMaterialInfoRequest, SetSlotStatusRequest, SetMaterialNameRequest
+//
+// WRONG in hakimio ace2-pro.proto, for THIS firmware:
+//
+//   1. GetTempResponse - has 6 float fields there; the firmware descriptor at
+//      0x080190E4 has SEVEN float (PB_LTYPE_FIXED32, 4-byte) fields, tags 1..7,
+//      at struct offsets 0x00..0x18. Handler 0x0800BD7E writes tag 1 and tag 2
+//      as literal 0 every time, so the six names in that file are also shifted
+//      relative to the real slots.
+//
+//   2. MotorMoveRequest (cmd 72) - listed as 4 fields {motor_id, direction,
+//      steps, speed}. The firmware request descriptor for cmd 72 is 0x08019328
+//      with exactly TWO uint32 fields. Handler 0x08010004 reads field 1 as a
+//      32-bit value and field 2 as a single byte, then calls the component
+//      driver 0x0800F278 -> 0x0800F0CC, which walks bits 0..7 of field 1 and
+//      sets each selected component to field 2. Same driver that SET_FAN uses
+//      with masks 0x10/0x20 and SET_VALVE with 0x40/0x80. So cmd 72 is a
+//      component on/off bitmask, not a 4-parameter motor move.
+//
+//   3. GetMotorStatusResponse (cmd 78) - listed as a flat
+//      {motor_id, state, position}. The firmware response descriptor is
+//      0x080191C8: a single REPEATED submessage field, tag 1, max_count 16,
+//      element type 0x08018DF4 = {uint32, uint32}. Handler 0x0800FD5C always
+//      writes count = 16 and fills the 16 pairs from the table at 0x20000054 -
+//      the same table LINEAR_KEY_CALIBRATE (cmd 15, handler 0x0800FC98) writes
+//      into. So this reads back key/linear calibration pairs.
+//
+//   4. GetMaterialInfoResponse (cmd 16) - listed as {uint32 index, string name}.
+//      The firmware response 0x08019224 is {uint32 index = 1,
+//      MaterialInfo info = 2} where MaterialInfo (0x08019484) =
+//      {string name (char[22]) = 1, uint32 code = 2}. Handler 0x0800DA30 sets
+//      has_info = 1 at offset 4, copies 21 name bytes to offset 8 and writes
+//      the code word at offset 0x20. Field 2 is a nested message, not a string.
+//
+//   5. VersionResponse (cmd 5 IAP_VERSION) - listed as 2 fields. cmd 5 uses the
+//      SAME descriptor as GET_INFO (0x08019148), which has THREE fields; the
+//      third is the bool at struct offset 0x18 (InfoResponse.first_request).
+//
+//   6. SetPrinterStatusRequest (cmd 20) - listed as uint32 status. The firmware
+//      descriptor 0x08019350 declares field 1 as PB_LTYPE_BOOL, data_size 1;
+//      handler 0x0800E9EA reads it with LDRB. It is a bool.
+//
+// PRESENT in hakimio ace2-pro.proto but with NO descriptor and NO handler in
+// this firmware (the command ids are not registered at all - see below):
+//   DryTestRequest (cmd 67 DRY_TEST), RfidTestRequest (cmd 69 RFID_TEST),
+//   SetKeyLogEnableRequest (cmd 74 SET_KEY_LOG_ENABLE).
+//
+// MISSING from hakimio ace2-pro.proto (no message given for it):
+//   MOTOR_TEST (cmd 77) takes a request - it reuses the FeedOrRollbackRequest
+//   shape (descriptor 0x08018F78, shared with cmd 8). Handler 0x0800B400
+//   validates field1 <= 3, field2 <= 100, field4 <= 3.
+//
+// CAVEATS / things that CANNOT be recovered from nanopb descriptors:
+//   - Field NAMES are not in the firmware. Every name above comes from
+//     hakimio's file or from handler behaviour.
+//   - enum vs uint32 is indistinguishable: nanopb encodes both as
+//     PB_LTYPE_UVARINT with data_size 4.
+//   - proto3 "singular" vs proto2 "optional" is only distinguishable by
+//     size_offset != 0. All scalar fields here have size_offset 0 (implicit
+//     presence); only submessage fields carry a has_ flag.
+//   - Message names are not in the firmware either. Cmd72Request, Cmd78Response
+//     and Cmd78Entry are placeholders invented here.
+//
+// DISPATCH DISCREPANCY (26 static entries vs 33 registered commands):
+//   The static array at 0x08018C5C holds 26 {req_msgdesc, resp_msgdesc, handler}
+//   triples. The other 7 commands use triples that are BUILT IN RAM at boot by
+//   the code at 0x08015E6E..0x0801601A (an stmia of {req, resp, handler} into a
+//   RAM slot, each guarded by a per-feature enable byte):
+//     0x20000E70  cmd 73 GET_SENSOR_STATE      built at 0x08015F76
+//     0x20000E7C  cmd 78 GET_MOTOR_STATUS(?)   built at 0x08015FFA
+//     0x20000E88  cmd 15 LINEAR_KEY_CALIBRATE  built at 0x08015FB8
+//     0x20000FA4  cmd 71 SET_FAN               built at 0x08015EB0
+//     0x20000FB0  cmd 70 FLASH_LED             built at 0x08015F34
+//     0x20000FBC  cmd 66 SET_VALVE             built at 0x08015EF2
+//     0x20000FC8  cmd 72 MOTOR_MOVE(?)         built at 0x08015E6E
+//   26 + 7 = 33. All 33 thunks call the generic dispatcher at 0x08009C5C.
+// ============================================================================

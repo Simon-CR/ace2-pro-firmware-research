@@ -59,6 +59,7 @@ it was worth doing.
 | **Full Bambu tag decryption via the ACE** | Material, type, colour, weight, diameter, temperatures, production date — from the factory tag, read through Anycubic hardware. The authentication and decode run **on the host**, driving the reader through the passthrough; they are not in the firmware. |
 | **Bambu tags are permanently read-only** | Proven from the access bits. Settles the "can I rewrite a Bambu tag for a refill?" question: no, and never. |
 | **NTAG writing works** | The ACE can write tags you own — something stock firmware cannot do at all. |
+| **The complete protobuf wire format, decoded from the firmware's own descriptors** | Field numbers, wire types, C sizes and array bounds read from the device's nanopb tables rather than inferred from traffic — including six corrections to the widely-used `.proto`, and proof that commands 67/69/74 are not registered at all. |
 
 Full detail in [docs/](docs/).
 
@@ -93,6 +94,7 @@ Moving the authentication and decode **into** the firmware — filling the norma
 | [docs/04-tag-operations.md](docs/04-tag-operations.md) | Practical sequences: parking a tag, anticollision, reading, writing |
 | [docs/05-protocol-notes.md](docs/05-protocol-notes.md) | Other protocol findings: feed/rollback modes, buffer gating, the STOP window |
 | [FLASHING.md](FLASHING.md) | How to build and flash — **and the risks** |
+| [docs/06-protobuf-descriptors.md](docs/06-protobuf-descriptors.md) | The complete wire format, decoded from the firmware's own nanopb descriptors — plus six corrections to the widely-used `.proto` |
 | [examples/README.md](examples/README.md) | Installing the Klipper extra, and G-code usage |
 
 ## Using it
@@ -106,6 +108,7 @@ Nothing in this repository works without the extra in `klipper/`, so install tha
 
 ## Contents
 
+- `protocol/` — the derived `.proto` for V1.1.31 and the raw descriptor dump
 - `klipper/` — the Klipper extra providing `ACE_RAW_CMD` / `ACE_RAW_FEED` / `ACE_RAW_STOP`
 - `examples/` — G-code usage examples
 - `firmware/` — patch sources (ARM Thumb-2) and the build script
