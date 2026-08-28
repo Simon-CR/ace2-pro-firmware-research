@@ -56,11 +56,30 @@ it was worth doing.
 | **The bootloader speaks the protocol** | Recovery does **not** require SWD/JTAG, contrary to reasonable assumption. |
 | **UID passthrough patch** | Makes the ACE report the UID of any ISO 14443A tag it cannot decode — Bambu, OpenSpool, blank NTAG. |
 | **RC522 passthrough patch** | Gives the host full reader control: raw registers, select, page reads, arbitrary frames — i.e. read *and write* arbitrary tags. |
-| **Full Bambu tag decryption on the ACE** | Material, type, colour, weight, diameter, temperatures, production date — from the factory tag, on Anycubic hardware. |
+| **Full Bambu tag decryption via the ACE** | Material, type, colour, weight, diameter, temperatures, production date — from the factory tag, read through Anycubic hardware. The authentication and decode run **on the host**, driving the reader through the passthrough; they are not in the firmware. |
 | **Bambu tags are permanently read-only** | Proven from the access bits. Settles the "can I rewrite a Bambu tag for a refill?" question: no, and never. |
 | **NTAG writing works** | The ACE can write tags you own — something stock firmware cannot do at all. |
 
 Full detail in [docs/](docs/).
+
+### What runs where — this distinction matters
+
+| | in the firmware | on the host |
+|---|---|---|
+| **UID passthrough** | **yes — self-contained.** Any unmodified host sees `sku` = UID hex, `version 0x0201`, on any tag the ACE cannot decode | — |
+| RC522 passthrough (registers, select, page read, arbitrary frames, cache clear) | yes — the mechanism | the driving logic |
+| **Bambu authentication and decode** | **no** | yes — key derivation, `MFAuthent`, block reads and parsing all run in Python |
+| Tag parking, anticollision handling, NTAG writing | — | yes |
+
+So the ACE is not reading Bambu tags by itself: it acts as a reader that host scripts operate.
+A host that does not know about the passthrough (a Snapmaker U1, an Anycubic printer) gets the
+**UID** but not the material data.
+
+Moving the authentication and decode **into** the firmware — filling the normal
+`FilamentInfoResponse` fields — would make a Bambu spool indistinguishable from an Anycubic one to
+*any* host with no host-side changes. That is the obvious next step: roughly 1.5–2.5 KB of code
+(SHA-256 dominates) against ~42 KB of free flash, and the required sequence is fully documented in
+[docs/04-tag-operations.md](docs/04-tag-operations.md).
 
 ---
 
