@@ -73,9 +73,22 @@ Full detail in [docs/](docs/).
 | [docs/03-rfid-and-tags.md](docs/03-rfid-and-tags.md) | Tag formats, the acceptance gate, Bambu decryption, write-protection |
 | [docs/04-tag-operations.md](docs/04-tag-operations.md) | Practical sequences: parking a tag, anticollision, reading, writing |
 | [docs/05-protocol-notes.md](docs/05-protocol-notes.md) | Other protocol findings: feed/rollback modes, buffer gating, the STOP window |
+| [FLASHING.md](FLASHING.md) | How to build and flash — **and the risks** |
+| [examples/README.md](examples/README.md) | Installing the Klipper extra, and G-code usage |
+
+## Using it
+
+**Start here:** [examples/README.md](examples/README.md) — installing the Klipper extra that
+provides `ACE_RAW_CMD`, and G-code examples for reading a tag's UID, clearing a lane's cached
+record, selecting and dumping a tag, parking a tag by rotating the lane, and the undocumented
+rollback-assist feed mode.
+
+Nothing in this repository works without the extra in `klipper/`, so install that first.
 
 ## Contents
 
+- `klipper/` — the Klipper extra providing `ACE_RAW_CMD` / `ACE_RAW_FEED` / `ACE_RAW_STOP`
+- `examples/` — G-code usage examples
 - `firmware/` — patch sources (ARM Thumb-2) and the build script
 - `tools/` — host-side scripts: reader driver, tag parking, key derivation reference, flasher patch
 - `data/` — real tag dumps captured during the work

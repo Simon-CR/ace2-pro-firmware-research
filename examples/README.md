@@ -1,0 +1,150 @@
+# Using it: G-code examples
+
+Everything here runs through `ACE_RAW_CMD`, provided by the Klipper extra in
+[`klipper/ace_raw_feed.py`](../klipper/ace_raw_feed.py). **Install that first** — none of the
+tooling works without it.
+
+## Install
+
+```bash
+cp klipper/ace_raw_feed.py ~/klipper/klippy/extras/
+```
+
+Add to `printer.cfg`:
+
+```ini
+[ace_raw_feed]
+```
+
+Then restart the Klipper **service** (not just `RESTART` — Klipper does not reload Python modules
+on a soft restart):
+
+```bash
+sudo systemctl restart klipper
+```
+
+It provides three commands:
+
+| command | purpose |
+|---|---|
+| `ACE_RAW_CMD T=<tool> CMD=<name> [KEY=value ...]` | send any ACE command; this is the one the patches use |
+| `ACE_RAW_FEED T=<tool> MODE=<0..3> [SPEED=] [LENGTH=]` | `FEED_OR_ROLLBACK` with an explicit mode, including the undocumented mode 3 |
+| `ACE_RAW_STOP T=<tool>` | `STOP_FEED_OR_ROLLBACK` |
+
+Motion, heater and configuration commands are rejected by `ACE_RAW_CMD` on purpose; use the
+driver's own macros for those.
+
+---
+
+## Encoding the RC522 sub-command
+
+The passthrough packs its sub-command into the request's `index` field:
+
+```
+bit31 = 1        (forces index >= 4, which is what routes into the stub)
+bit24            reader: 0 = slots 0/1, 1 = slots 2/3
+bits 23..16      op
+bits 13..8       arg1
+bits  7..0       arg2
+```
+
+So `INDEX = 0x80000000 | reader<<24 | op<<16 | arg1<<8 | arg2`. In decimal, for reader 1:
+
+| what | expression | value |
+|---|---|---|
+| read register 0x37 | `0x81003700` | 2164272384 |
+| SELECT (op 6) | `0x81060000` | 2164654080 |
+| bulk page read (op 7) | `0x81070000` | 2164719616 |
+| clear cache, slot 2 (op 8) | `0x81080200` | 2164785664 |
+
+`tools/ace_reader.py` builds these for you; the raw form is shown here so the mechanism is clear.
+
+---
+
+## Check the firmware is ACE2-Open
+
+```gcode
+ACE_RAW_CMD T=0 CMD=GET_INFO
+```
+
+Look for `version: 'V1.1.3O'` in the console. `V1.1.31` means stock firmware is running.
+
+## Read a tag's UID (any tag, including Bambu)
+
+The UID passthrough needs no special command — it is the normal identify:
+
+```gcode
+ACE_RAW_CMD T=3 CMD=FILAMENT_IDENTIFY
+```
+
+- Anycubic tag → `code 0`, real `sku`, `version 101`
+- Any other tag → `code 0`, `sku` = UID hex, **`version 513`** (`0x0201`, the "this is a UID" sentinel)
+- Nothing in the field → `code 3`
+
+The tag must be in front of the antenna at that instant — see
+[docs/04-tag-operations.md](../docs/04-tag-operations.md) for why a single stationary read usually
+fails, and how to park the tag first.
+
+## Clear a lane's cached tag record
+
+```gcode
+; op 8, slot 2, reader 1  ->  0x81080200
+ACE_RAW_CMD T=0 CMD=FILAMENT_IDENTIFY INDEX=2164785664
+ACE_RAW_CMD T=2 CMD=GET_FILAMENT_INFO    ; now reports version 0, empty sku
+```
+
+Useful after a spool change so the lane reports "nothing decoded yet" instead of the previous
+spool's identity. Note it clears the *firmware's* record; the Klipper driver keeps its own copy.
+
+## Select a card and dump its pages
+
+```gcode
+; op 6 SELECT, reader 1  ->  0x81060000
+ACE_RAW_CMD T=0 CMD=FILAMENT_IDENTIFY INDEX=2164654080
+; op 7 bulk page read    ->  0x81070000   (returns 144 on success)
+ACE_RAW_CMD T=0 CMD=FILAMENT_IDENTIFY INDEX=2164719616
+```
+
+Reading the 144 bytes back out is done a byte at a time (op 4), which is why the Python tooling
+exists — see `tools/ace_reader.py`.
+
+## Rotate a lane to bring its tag into the antenna
+
+Raw async motion, so the gcode queue stays free for probing between steps:
+
+```gcode
+ACE_RAW_FEED T=2 MODE=1 LENGTH=15 SPEED=20     ; rollback 15mm (winds onto the spool)
+ACE_RAW_CMD  T=2 CMD=FILAMENT_IDENTIFY         ; did the tag answer yet?
+```
+
+Repeat until it answers, then **stop** — the tag is parked in the field and you can work without
+time pressure. Allow ~600 mm for a full revolution of a 1 kg spool. Restore the lane position
+afterwards with the opposite mode.
+
+## Rollback-assist (mode 3) — the undocumented feed mode
+
+```gcode
+ACE_RAW_FEED T=0 MODE=3 SPEED=90               ; arm rollback-assist
+; ... extruder retracts at its own pace; the ACE takes up slack 1:1 ...
+ACE_RAW_STOP T=0                               ; stop
+```
+
+Mode 3 rewinds until the strand goes taut, waits, and resumes when slack appears — so the ACE can
+only take up, never push, and no pacing between the two motors is needed. Set the speed *above*
+any extruder retract rate.
+
+**Two rules:** enter it only from `ready` (stop any running assist first), and make **no forward
+extruder move while it is armed** — pushing creates slack, the ACE immediately rewinds it, and the
+feeder fights the nip. See [docs/05-protocol-notes.md](../docs/05-protocol-notes.md).
+
+---
+
+## Safety notes for macros
+
+If you wrap any of this in a macro, two things belong in the sequence rather than in a comment:
+
+1. **Guard against `code 4` (ANTICOLLISION).** Slots 2 and 3 share one antenna that can see both
+   bays. Rotate the other lane's tag clear and confirm before acting, or you may read — or
+   write — the wrong tag without noticing.
+2. **For writes, offer to flip the spool** and repeat, so both faces carry the same payload and
+   the spool works in any orientation.
