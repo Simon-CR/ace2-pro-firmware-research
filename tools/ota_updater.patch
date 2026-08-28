@@ -1,0 +1,68 @@
+# Two fixes for hakimio's ace2-ota-update.py
+#
+#   https://gist.github.com/hakimio/4916ff69add458fdc51aeea76f21efb9
+#
+# This is a PATCH, not a fork -- please take the original from hakimio and apply this on top,
+# so credit and future updates stay with the author.
+#
+#   1. send_recv never returned early, so every one of ~1119 firmware chunks burned the full
+#      2 s timeout. That is the entire 37-minute flash time, almost all of it idle. Returning
+#      on the ack gives a measured 26.5 s flash. A deliberate 15 ms per-chunk pause is kept in
+#      case the MCU acks before its flash write settles.
+#
+#   2. The tool filtered replies on the 0x80 response bit, but the BOOTLOADER answers with
+#      flags = 1. So during recovery -- exactly when it is needed -- it reported "No response.
+#      ACE may not be connected or initialised" and a perfectly healthy device looked bricked.
+#      Matching on the command id fixes it. This is the more important of the two.
+#
+# Apply with:  patch -p1 < ota_updater.patch
+#
+--- a/ace2-ota-update.py
++++ b/ace2-ota-update.py
+@@ -97,7 +97,8 @@
+ 
+ # Timeouts (seconds) matching gklib values
+ T_START   = 2.0   # OtaStart timeout
+-T_CHUNK   = 2.0   # OtaSendChunk timeout
++T_CHUNK   = 2.0   # OtaSendChunk timeout (now an upper bound; send_recv returns on the ack)
++CHUNK_DELAY = 0.015  # deliberate pause after each acked chunk; see the chunk loop
+ T_FINISH  = 5.0   # OtaFinish timeout
+ 
+ # ═══════════════════════════════════════════════════════════════════
+@@ -253,10 +254,21 @@
+                         buf = buf[n:]
+                     else:
+                         break
+-                    if p and p["is_resp"] and p["cmd"] == cmd:
++                    # The BOOTLOADER answers without the 0x80 response bit (observed
++                    # 2026-08-28: GET_INFO from IAP mode returns flags=1, while the
++                    # application returns flags=0x81). Filtering on is_resp made the
++                    # flasher deaf to the bootloader -- i.e. deaf exactly when it is
++                    # needed for recovery. Match on the command id and accept either.
++                    if p and p["cmd"] == cmd and (p["is_resp"] or p["payload"] != payload):
+                         results.append(p)
++                # Return as soon as the device has answered. The original loop always ran
++                # to the full timeout, so every one of the ~1119 firmware chunks cost the
++                # whole T_CHUNK (2.0s) even though the ACE acks in milliseconds -- that is
++                # the entire 37-minute flash time, almost all of it idle.
++                if results:
++                    return results
+             else:
+-                time.sleep(0.005)
++                time.sleep(0.002)
+         return results
+ 
+ # ═══════════════════════════════════════════════════════════════════
+@@ -452,6 +464,12 @@
+             print(f"\n[ERROR] Chunk {i} rejected at addr=0x{addr:08X}: code={code}")
+             return False
+ 
++        # The MCU may ack a chunk before its flash write has settled. The original script hid
++        # this behind a 2s always-wait loop; now that we return on the ack, keep a deliberate
++        # margin instead of hammering the flash controller. 15ms x 1120 chunks = ~17s total.
++        if CHUNK_DELAY:
++            time.sleep(CHUNK_DELAY)
++
+         # Progress bar
+         pct = (i + 1) / n_chunks * 100
+         bar = int(pct / 2)
