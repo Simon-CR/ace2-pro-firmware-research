@@ -60,6 +60,13 @@ it was worth doing.
 | **Bambu tags are permanently read-only** | Proven from the access bits. Settles the "can I rewrite a Bambu tag for a refill?" question: no, and never. |
 | **NTAG writing works** | The ACE can write tags you own — something stock firmware cannot do at all. |
 | **The complete protobuf wire format, decoded from the firmware's own descriptors** | Field numbers, wire types, C sizes and array bounds read from the device's nanopb tables rather than inferred from traffic — including six corrections to the widely-used `.proto`, and proof that commands 67/69/74 are not registered at all. |
+| **A dryer safety review** | The normal drying path is well protected and safe unattended — but two "debug" commands defeat every protection, one of which can leave the heater at full duty with no timer and nothing to switch it off. |
+| **The preload is autonomous, with hardcoded bounds** | 1700 mm budget at 50 mm/s, 400 mm park datum, 750/1100 mm ceilings — which explains a real ~60-second runaway feed when a tag cannot be decoded. |
+| **The feed check is a slip comparator, not a threshold** | `\|Δmotor − Δencoder\| > error_length × 1.2342`, yielding STUCK/TANGLED. Existing tuning advice built on the older reading is wrong — lowering `check_length` tightens the interval, it does not widen tolerance. |
+| **The ACE MCU does not detect per-lane runout** | The four EMPTY sensor channels are stubbed to constant 0 in this build and can never fire. Runout must come from a toolhead sensor. |
+| **Jam detection is off during printing, and inert at the fallback defaults** | The check is bypassed for rollback *and* for feed assist — so it protects loads and preloads only. At the boot fallback (`check=3, error=10`) the window is smaller than the threshold, so it can never fire. |
+| **Error states 133/134 can never reach the host** | STUCK/TANGLED are computed and then re-coded to 129/132 by the operation handlers. Host logic branching on them is dead code. |
+| **The post-STOP "dead window" has no timer** | It is the STOP being *lost* — two provable races, including a 200 ms delay in the move-setup path. Poll `GET_STATUS` after a stop; never STOP within ~250 ms of the move that started it. |
 
 Full detail in [docs/](docs/).
 
@@ -95,6 +102,9 @@ Moving the authentication and decode **into** the firmware — filling the norma
 | [docs/05-protocol-notes.md](docs/05-protocol-notes.md) | Other protocol findings: feed/rollback modes, buffer gating, the STOP window |
 | [FLASHING.md](FLASHING.md) | How to build and flash — **and the risks** |
 | [docs/06-protobuf-descriptors.md](docs/06-protobuf-descriptors.md) | The complete wire format, decoded from the firmware's own nanopb descriptors — plus six corrections to the widely-used `.proto` |
+| [docs/07-subsystems-and-safety.md](docs/07-subsystems-and-safety.md) | **Dryer safety review**, actuator map, NVM layout and a flash-wear hazard, and the rest of the command set |
+| [docs/08-motion-and-preload.md](docs/08-motion-and-preload.md) | Motors, the autonomous preload and its hardcoded bounds, length accounting, and the feed-check slip comparator |
+| [docs/09-error-states-and-jam-detection.md](docs/09-error-states-and-jam-detection.md) | The seven error states, what jam detection really measures, when it is switched off, and the solved post-STOP window |
 | [examples/README.md](examples/README.md) | Installing the Klipper extra, and G-code usage |
 
 ## Using it

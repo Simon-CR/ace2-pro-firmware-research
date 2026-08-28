@@ -58,10 +58,35 @@ class AceRawFeed:
     def cmd_raw_cmd(self, gcmd):
         inst, slot = self._inst_slot(gcmd)
         command = gcmd.get('CMD').upper()
-        if command in ("FEED_OR_ROLLBACK", "UPDATE_SPEED", "DRYING", "SET_DRY_TEMP",
-                       "SET_DRY_POWER", "SET_PTC_TEMP", "SET_VALVE", "SET_OUTPUT",
-                       "LINEAR_KEY_CALIBRATE", "SET_FEED_CHECK", "ASSIGN_DEVICE_ID"):
-            raise gcmd.error("ACE_RAW_CMD: %s is not allowed here (motion/heat/config)" % command)
+        # Blocked deliberately. Grouped by why, because the reasons differ:
+        #
+        #  motion  - drives filament with no print interlock. MOTOR_TEST (77) is the worst:
+        #            it shares FEED_OR_ROLLBACK's worker, ignores printer status, and will
+        #            drive a lane the firmware has already flagged as jammed or tangled.
+        #  heat    - SET_DRY_POWER writes the heater triac duty DIRECTLY, with no state gate,
+        #            no temperature reference, no timer and nothing that will ever turn it
+        #            off. SET_PTC_TEMP installs a PID target with NO upper bound and zeroes
+        #            the setpoint, which also disarms the thermistor fault shutdown. Use the
+        #            driver's dryer macros (cmd 11 DRYING), which are properly clamped.
+        #  flash   - SET_MATERIAL_NAME / SET_SLOT_STATUS commit the whole settings block to
+        #            flash on EVERY call, even when nothing changed: two 2KB page erases per
+        #            command, ~10k cycle endurance. Calling these in a loop or per toolchange
+        #            destroys the settings pages.
+        #  config  - LINEAR_KEY_CALIBRATE writes filament-detector thresholds that PERSIST
+        #            across reboot and OTA, from a single instantaneous ADC sample, accepted
+        #            mid-print. A plausible-but-wrong calibration is effectively permanent.
+        BLOCKED = {
+            "FEED_OR_ROLLBACK": "motion", "UPDATE_SPEED": "motion", "MOTOR_TEST": "motion",
+            "DRYING": "heat", "SET_DRY_TEMP": "heat", "SET_DRY_POWER": "heat",
+            "SET_PTC_TEMP": "heat",
+            "SET_MATERIAL_NAME": "flash wear", "SET_SLOT_STATUS": "flash wear",
+            "LINEAR_KEY_CALIBRATE": "config", "SET_FEED_CHECK": "config",
+            "ASSIGN_DEVICE_ID": "config",
+            "SET_VALVE": "actuator", "SET_OUTPUT": "actuator", "FLASH_LED": "actuator",
+        }
+        if command in BLOCKED:
+            raise gcmd.error("ACE_RAW_CMD: %s is blocked (%s). See the comment in "
+                             "ace_raw_feed.py for why." % (command, BLOCKED[command]))
         params = {}
         for k, v in gcmd.get_command_parameters().items():
             if k in ("T", "CMD"):

@@ -124,14 +124,18 @@ afterwards with the opposite mode.
 ## Rollback-assist (mode 3) — the undocumented feed mode
 
 ```gcode
-ACE_RAW_FEED T=0 MODE=3 SPEED=90               ; arm rollback-assist
-; ... extruder retracts at its own pace; the ACE takes up slack 1:1 ...
+ACE_RAW_FEED T=0 MODE=3                        ; arm rollback-assist
+; ... extruder retracts; the ACE takes up the slack ...
 ACE_RAW_STOP T=0                               ; stop
 ```
 
 Mode 3 rewinds until the strand goes taut, waits, and resumes when slack appears — so the ACE can
-only take up, never push, and no pacing between the two motors is needed. Set the speed *above*
-any extruder retract rate.
+only take up, never push, and no pacing between the two motors is needed.
+
+**The `SPEED` argument is ignored for assist modes.** The handler hardcodes 50 mm/s and an
+unbounded length (`0x0800A324`). So keep extruder retraction **below 50 mm/s** — faster than that
+and the ACE cannot keep up, and slack builds instead of being taken up. Note also an MCU-side
+**4-second continuous-assist limit** before the firmware takes an error path.
 
 **Two rules:** enter it only from `ready` (stop any running assist first), and make **no forward
 extruder move while it is armed** — pushing creates slack, the ACE immediately rewinds it, and the
