@@ -167,7 +167,14 @@ properly, with a mode chosen per lane:
 | `spin` | lane **not threaded** (slot `empty`, tip secured) | continuous rotation in one direction |
 | `off` | | excluded |
 
+**A lane is inert until its parked position is known against a hard datum.** Sweeping moves a spool,
+so the position it is moving from has to be a measured fact, not an assumption. That datum is
+`ace_cal_park_to_hub[lane]`, written by the driver's own `ACE_CALIBRATE_PATH T=<n> FROM_PARK=1`,
+which is valid only straight after a fresh preload and needs the shared hub path free. Until it
+exists the lane stays inert whatever mode is configured, and `ACE_DRYROLL_STATUS` says so.
+
 ```gcode
+ACE_CALIBRATE_PATH T=0 FROM_PARK=1  ; after a fresh preload, hub free -> establishes the datum
 ACE_LANE_RANGE T=0                  ; one-time: measure the usable travel
 ACE_DRYROLL_MODE T=0 MODE=sweep
 ACE_DRYROLL_MODE T=1 MODE=spin      ; refused unless slot 1 reads 'empty'
