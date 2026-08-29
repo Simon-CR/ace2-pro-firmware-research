@@ -152,3 +152,43 @@ If you wrap any of this in a macro, two things belong in the sequence rather tha
    write — the wrong tag without noticing.
 2. **For writes, offer to flip the spool** and repeat, so both faces carry the same payload and
    the spool works in any orientation.
+
+---
+
+## Spool rotation during drying (`ace_dryroll.cfg`)
+
+Anycubic's own `auto_roll` nudges 5 mm every ~4 minutes — it barely rotates the spool and slowly
+walks the filament backwards. [`klipper/ace_dryroll.cfg`](../klipper/ace_dryroll.cfg) does it
+properly, with a mode chosen per lane:
+
+| mode | requires | behaviour |
+|---|---|---|
+| `sweep` | lane **threaded** (slot `ready`) | back-and-forth within a calibrated range that lies entirely on the ACE side of the parked position — never toward the hub. Position preserved, nothing to tie. |
+| `spin` | lane **not threaded** (slot `empty`, tip secured) | continuous rotation in one direction |
+| `off` | | excluded |
+
+```gcode
+ACE_LANE_RANGE T=0                  ; one-time: measure the usable travel
+ACE_DRYROLL_MODE T=0 MODE=sweep
+ACE_DRYROLL_MODE T=1 MODE=spin      ; refused unless slot 1 reads 'empty'
+ACE_DRYROLL_STATUS
+ACE_DRYROLL_START                   ; hook this into your dry macro
+ACE_DRYROLL_STOP
+```
+
+**The mode guard is mechanical, not advisory.** `spin` refuses unless the slot reads `empty`, so
+continuous winding can never run on a fed lane; `sweep` refuses unless it reads `ready`. Neither
+runs on the loaded tool, on a lane positioned at `toolhead`, or (by default) during a print.
+
+**Calibration never crosses the gate sensor.** It steps back 25 mm at a time and stops at the last
+step where filament is still reported present. Crossing it and returning produces the 0→1 INSERT
+edge that triggers the firmware's autonomous ~1700 mm preload toward the hub — see
+[docs/08](../docs/08-motion-and-preload.md). As a second layer, the restoring feed is issued as one
+long move, so any crossing lands mid-feed while the slot reads `feeding`; the preload trigger
+requires `ready`.
+
+**Unconfirmed:** whether `spin` actually turns the spool with no filament in the gears depends on
+the feeder and spool sharing one motor through a permanent coupling. The firmware is consistent
+with that (four motors total, no spool-rotation command anywhere in the protocol, and `MOTOR_TEST`
+reuses the same worker) but it has not been verified on hardware. If the spool does not turn in
+`spin` mode, that is your answer — use `sweep`.
