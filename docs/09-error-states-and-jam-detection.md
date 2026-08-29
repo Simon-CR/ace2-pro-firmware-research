@@ -43,8 +43,10 @@ a deficit trip, so 130 cannot fire.
 
 ## 2. What the check actually measures
 
-It lives in a per-slot object at `0x20001BA0` and is driven by a **FreeRTOS software timer of
-period 20 ticks** named `"OdometerTimer"` — so it samples **every 20 ms**, not once per move.
+It lives in a per-slot object at `0x20001BA0`. A FreeRTOS timer name string `"OdometerTimer"`
+exists in the image at `0x08015930`, and our analysis pass attributed the check to a 20-tick
+software timer — but **we could not independently locate the reference linking that timer to this
+function**, so treat the sampling period as unverified. What follows does not depend on it.
 
 ```
 if (!enabled)  return
@@ -93,7 +95,11 @@ flash-backed settings blob. There are only two writers in the entire image: `SET
 the boot clamp. **There is no factory-defaults writer and no getter — you cannot read the current
 values back over the protocol.**
 
-The boot clamp, corrected against the widely-quoted description:
+The boot clamp. Note the second branch: the published description says it resets `error_length`
+to 10, but the branch reuses the *first* branch's store instruction after reloading `r1` with
+**255** (`0x8015818: mov.w r1,#255` sits immediately before `0x801581C: bcc 0x80157F6`), so a bad
+`error_length` becomes the disabling sentinel. Both tests also catch `255` on entry, because of the
+`adds #1 ; uxtb ; cmp #4` idiom:
 
 ```
 if (check_length in {0,1,2,255}) { check_length = 3;  error_length = 10; }
