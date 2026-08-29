@@ -167,21 +167,43 @@ properly, with a mode chosen per lane:
 | `spin` | lane **not threaded** (slot `empty`, tip secured) | continuous rotation in one direction |
 | `off` | | excluded |
 
-**A lane is inert until its parked position is known against a hard datum.** Sweeping moves a spool,
-so the position it is moving from has to be a measured fact, not an assumption. That datum is
-`ace_cal_park_to_hub[lane]`, written by the driver's own `ACE_CALIBRATE_PATH T=<n> FROM_PARK=1`,
-which is valid only straight after a fresh preload and needs the shared hub path free. Until it
-exists the lane stays inert whatever mode is configured, and `ACE_DRYROLL_STATUS` says so.
+**A lane is inert until its parked position is known against a hard datum** — sweeping moves a
+spool, so the position it moves from has to be a measured fact. But the roller does not fail on a
+lane that lacks one: it **checks whether it is calibrated, and if not, whether it can calibrate
+right now** (printer idle, hub clear, shared path free, slot ready). If it can, it calibrates on
+the spot via `ACE_LANE_NORMALIZE` — feed to the hub switch, back off `park_offset_mm` — and starts
+rolling. If it cannot, it says what it is waiting for and retries. One lane per pass, because the
+hub is a single-occupancy shared resource.
+
+`spin` needs no datum: nothing is threaded, so there is no position to know.
 
 ```gcode
-ACE_CALIBRATE_PATH T=0 FROM_PARK=1  ; after a fresh preload, hub free -> establishes the datum
-ACE_LANE_RANGE T=0                  ; one-time: measure the usable travel
 ACE_DRYROLL_MODE T=0 MODE=sweep
 ACE_DRYROLL_MODE T=1 MODE=spin      ; refused unless slot 1 reads 'empty'
 ACE_DRYROLL_STATUS
-ACE_DRYROLL_START                   ; hook this into your dry macro
+ACE_DRYROLL_START                   ; calibrates whatever needs it, then rolls
 ACE_DRYROLL_STOP
+ACE_LANE_RANGE T=0                  ; optional: refine the 600mm default to the measured bound
 ```
+
+Observed on hardware, four loaded lanes from cold, no intervention:
+
+```
+[DRYROLL] T2 calibrating now (hub free, printer idle)
+[PARK] T2: seeking the hub to establish a datum
+[PARK] T2: hub released after 50mm of backoff
+[PARK] T2 parked 50mm short of the hub (sensor-defined, repeatable).
+       park -> toolhead entry is now 605.9mm
+[DRYROLL] T2 calibrated - park is sensor-defined, sweeping 600mm on the ACE side
+```
+
+All four serialized on the hub in 349 s, then swept — encoder confirming 149 mm commanded against
+148–153 mm measured per leg.
+
+A lane that cannot be parked is **retired after two attempts** (mode set to `off`) rather than
+re-running the ~1800 mm probe forever, and the next tick is armed *before* the long calibration
+call, so a lane that never finds the hub raises without killing the roller. A lane that leaves its
+park has its datum dropped automatically.
 
 **The mode guard is mechanical, not advisory.** `spin` refuses unless the slot reads `empty`, so
 continuous winding can never run on a fed lane; `sweep` refuses unless it reads `ready`. Neither
