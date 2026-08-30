@@ -222,6 +222,33 @@ permanent coupling, so a rollback on a lane with nothing in the gears still turn
 `magnitude_mm` 299 (the motor) and `moved_mm` 0 (the filament). Nothing is consumed and nothing is
 at risk, because nothing is in the path. See [docs/10](../docs/10-spool-drive-and-feed-telemetry.md).
 
+### Print integration
+
+`PRINT_START` calls `ACE_DRYROLL_PREPARE` right after `ACE_PREFLIGHT` — while the printer is still
+homing and soaking, so it costs no extra wall clock. Lanes the job will **use** stop rolling and are
+re-parked against the hub so the load starts from a sensor-defined datum; lanes the job does **not**
+use keep roasting right through the print (on shorter 50 mm legs, so the ACE is never busy long
+enough to collide with a toolchange). `PRINT_END` and `CANCEL_PRINT` call `ACE_DRYROLL_RELEASE`.
+
+Which lanes a job needs comes from `ace_slicer_usage.per_tool_mm`, or an explicit
+`ACE_DRYROLL_PREPARE TOOLS=0,2`. **If usage cannot be determined, every lane is reserved and
+parked** — guessing is not a safe failure mode, and parking a lane that did not need it costs
+nothing.
+
+If a reserved lane is off its datum *and* the hub is occupied, prepare **raises** rather than let
+the job start: a swept lane can sit up to 600 mm back, and loading from there under-feeds by that
+much.
+
+```
+[DRYROLL] print prepare: reserved=[1, 0, 1, 0] (TOOLS=0,2)
+[DRYROLL] re-parking reserved lanes [0] against the hub
+[PARK] T0 parked 50mm short of the hub (sensor-defined, repeatable).
+[DRYROLL] reserved lanes parked and ready
+```
+
+T2 was already at its datum and was skipped; T1 was 150 mm off datum but unreserved, so it was left
+rolling.
+
 ---
 
 ## State audit (`ace_audit.cfg`)
