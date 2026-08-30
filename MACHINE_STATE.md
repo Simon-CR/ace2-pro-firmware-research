@@ -47,9 +47,9 @@ end) or at the hub. Nothing in software can move it.
 8. 350mm of ACE-alone retract then pulled the strand clear out of lane 0 and released it,
    leaving the free segment described above.
 
-## Root causes identified (both still unfixed)
+## Root causes identified
 
-### 1. `ptfe_postgear_to_nozzle` is wrong — caused the under-purge
+### 1. `ptfe_postgear_to_nozzle` was wrong — caused the under-purge  **[FIXED]**
 
 ```
 ptfe_postgear_to_nozzle      = 51.7
@@ -66,9 +66,40 @@ The arithmetic reproduces the log exactly. With 51.7:
 log. With the measured 80: `net_already = 10.0`, and the purge would have been **~57mm instead of
 28.5mm**. Roughly half the prime that was needed.
 
-Owner's instruction: the value was already measured; it does not need re-measuring. It needs the
-**with-cutter and without-cutter values stored separately**, with the purge told which applies —
-one variable currently holds two different geometries and they silently disagree.
+**FIXED 2026-08-30.** `ptfe_postgear_to_nozzle` restored to the measured `80`. The purge now
+computes `entry_to_nozzle = 100.0`, which satisfies the invariant `ace.cfg` states in its own
+comments ("THE TWO MUST SUM TO >= 100") — independent confirmation the value is right. Purge goes
+from 28.5mm to **57.0mm**. Both figures are now also stored separately so they can never silently
+overwrite each other again: `ptfe_postgear_to_nozzle_measured = 80`,
+`ptfe_postgear_to_nozzle_crossbow_sum = 51.7`.
+
+### 1b. The two numbers are DIFFERENT QUANTITIES — and the cutter used the wrong one  **[FIXED]**
+
+This is the real insight, found by checking every consumer of the variable before trusting the fix.
+There are seven live readers, and one is the cutter:
+
+```
+crossbow.cfg:278   {% set postgear = svv.ptfe_postgear_to_nozzle|default(51.7)|float %}
+crossbow.cfg:286   {% set park_back = postgear - blade %}      # 51.7 - 46.1 = 5.6
+```
+
+`park_back` is a **geometric** blade->postgear distance. But `ptfe_postgear_to_nozzle` is a
+**functional** push-to-first-flow distance — the 2026-08-24 measurement ("flow began at ~80")
+includes melt-zone fill and compressibility, so it is legitimately ~28mm larger than the geometry.
+The two are not the same measurement and never were; the cutter's `default(51.7)` in that line is
+almost certainly how the functional variable came to be overwritten with the geometric sum.
+
+Consequences: deriving `park_back` from the functional value put the cut face in the wrong place,
+which is the most likely cause of the tapered/undersized faces the cutter kept warning about — and
+restoring the correct `80` would have made it worse still (`park_back` 33.9mm instead of 5.6mm).
+
+`crossbow_postgear_to_blade = 5.6` already existed as a saved variable and was simply not being
+used. `crossbow.cfg` now reads it directly, so cutter geometry and purge distance are fully
+decoupled. Backup at `crossbow.cfg.bak-geomfix`.
+
+The other six readers (`ace_purge.cfg:386`, `load.cfg:468`, `brush_prime.cfg:187`,
+`pause_resume.cfg:68`, `start.cfg:774`, `ace_mmu_shim.py:1071`) all want the FUNCTIONAL distance —
+they push filament and wait for it to arrive — so `80` is correct for every one of them.
 
 ### 2. Tandem extract should no longer exist
 
