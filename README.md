@@ -105,6 +105,7 @@ Moving the authentication and decode **into** the firmware — filling the norma
 | [docs/07-subsystems-and-safety.md](docs/07-subsystems-and-safety.md) | **Dryer safety review**, actuator map, NVM layout and a flash-wear hazard, and the rest of the command set |
 | [docs/08-motion-and-preload.md](docs/08-motion-and-preload.md) | Motors, the autonomous preload and its hardcoded bounds, length accounting, and the feed-check slip comparator |
 | [docs/09-error-states-and-jam-detection.md](docs/09-error-states-and-jam-detection.md) | The seven error states, what jam detection really measures, when it is switched off, and the solved post-STOP window |
+- [10. Spool drive and feed telemetry](docs/10-spool-drive-and-feed-telemetry.md) — the spool and feed gears share one motor (proven); `magnitude_mm` is the motor, `moved_mm` is the filament
 | [examples/README.md](examples/README.md) | Installing the Klipper extra, and G-code usage |
 
 ## Using it

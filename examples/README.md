@@ -216,8 +216,8 @@ edge that triggers the firmware's autonomous ~1700 mm preload toward the hub —
 long move, so any crossing lands mid-feed while the slot reads `feeding`; the preload trigger
 requires `ready`.
 
-**Unconfirmed:** whether `spin` actually turns the spool with no filament in the gears depends on
-the feeder and spool sharing one motor through a permanent coupling. The firmware is consistent
-with that (four motors total, no spool-rotation command anywhere in the protocol, and `MOTOR_TEST`
-reuses the same worker) but it has not been verified on hardware. If the spool does not turn in
-`spin` mode, that is your answer — use `sweep`.
+**Why `spin` works (proven on hardware):** the spool and the feed gears share one motor through a
+permanent coupling, so a rollback on a lane with nothing in the gears still turns the spool.
+`GET_FEED_INFO` separates the two measurements — with no filament, 299 mm commanded gave
+`magnitude_mm` 299 (the motor) and `moved_mm` 0 (the filament). Nothing is consumed and nothing is
+at risk, because nothing is in the path. See [docs/10](../docs/10-spool-drive-and-feed-telemetry.md).
