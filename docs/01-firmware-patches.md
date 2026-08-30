@@ -97,6 +97,21 @@ cannot: authenticate and decrypt Bambu tags, dump raw pages of any tag, and **wr
 
 ---
 
+### A second use case: the reader as a rotation sensor
+
+The spool tag passes the antenna once per revolution. Polling for tag presence at a fixed interval
+therefore tells you whether the spool is actually **turning** — not just whether the motor is being
+commanded to turn.
+
+That matters because the feed motor and the spool share one coupling
+([10](10-spool-drive-and-feed-telemetry.md)), so `magnitude_mm` reports the motor faithfully even
+when the spool is jammed, binding in its cradle, or the wrong size. A tag that appears and
+disappears on a regular cadence is positive evidence of rotation; a tag that stays put — or never
+appears — while the motor reports hundreds of millimetres is a stuck spool.
+
+This gives the drying rotisserie (`klipper/ace_dryroll.cfg`) a real feedback signal instead of an
+open loop, and it costs nothing but a periodic `SELECT`.
+
 ## Patch 3 — clear cached tag record (op 8)
 
 **What it does.** Zeroes the cached record for one slot: base `0x20000054 + slot × 164`, with
