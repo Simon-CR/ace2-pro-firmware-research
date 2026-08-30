@@ -89,9 +89,42 @@ includes melt-zone fill and compressibility, so it is legitimately ~28mm larger 
 The two are not the same measurement and never were; the cutter's `default(51.7)` in that line is
 almost certainly how the functional variable came to be overwritten with the geometric sum.
 
-Consequences: deriving `park_back` from the functional value put the cut face in the wrong place,
-which is the most likely cause of the tapered/undersized faces the cutter kept warning about — and
-restoring the correct `80` would have made it worse still (`park_back` 33.9mm instead of 5.6mm).
+Consequence: restoring the correct `80` would have broken the cutter — `park_back` would have
+become 33.9mm instead of 5.6mm. The decoupling was therefore REQUIRED before the purge fix could
+stand.
+
+**Correction to an earlier claim in this document:** this misderivation did NOT cause the
+undersized cut faces. With the old value, `park_back = 51.7 - 46.1 = 5.6`, which is exactly the
+correct geometric leg — the wrong route arrived at the right number by coincidence. The real cause
+is below. `park_back` also only sets where the tip parks AFTER the cut; the cut POSITION is
+`cut_h = blade - stub` and never involved this variable at all.
+
+### 1c. The cut stub was inside the taper, and its guard was defeated  **[FIXED]**
+
+The actual cause of the tapered/undersized faces:
+
+```
+cut_tip_stub        = 4.5     <- the stub actually cut
+cut_tip_deform_mm   = 4.5     <- the guard's floor, lowered to match
+cut_tip_full_dia_mm = 5.4     <- filament only returns to a full 1.75mm here
+```
+
+The stub was **0.9mm inside the taper**, so every cut face was undersized by design. The macro's
+guard is `stub < cut_tip_deform_mm`, i.e. `4.5 < 4.5` — false, so it never fired. Lowering the
+measurement had silently disarmed the check that existed to catch exactly this.
+
+`crossbow.cfg`'s own comment prescribes the remedy: *"STUB=6.0 is therefore the MEASURED MINIMUM,
+not a safe default. It leaves nothing for variation between cuts. Raise cut_tip_stub toward 8.0 if
+a cut face ever comes back tapered, undersized, or carrying the previous colour."* It came back
+tapered, so `cut_tip_stub` is now **8.0** (hot retract 38.1mm; the pushback cap is
+`blade - meltzone - margin = 21.1mm`, so 8.0 still fits comfortably).
+
+The guard now tests against the STRICTER of the two measurements
+(`max(cut_tip_deform_mm, cut_tip_full_dia_mm)`), so lowering one of them can no longer disarm it.
+Backup at `crossbow.cfg.bak-stubguard`.
+
+**An undersized cut face is very plausibly the whole reason the extraction failed** — a tapered tip
+is what the ACE gears cannot grip, and gripping is what the 0-encoder-pulse stall was reporting.
 
 `crossbow_postgear_to_blade = 5.6` already existed as a saved variable and was simply not being
 used. `crossbow.cfg` now reads it directly, so cutter geometry and purge distance are fully
