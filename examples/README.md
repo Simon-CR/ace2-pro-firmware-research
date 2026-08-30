@@ -221,3 +221,41 @@ permanent coupling, so a rollback on a lane with nothing in the gears still turn
 `GET_FEED_INFO` separates the two measurements — with no filament, 299 mm commanded gave
 `magnitude_mm` 299 (the motor) and `moved_mm` 0 (the filament). Nothing is consumed and nothing is
 at risk, because nothing is in the path. See [docs/10](../docs/10-spool-drive-and-feed-telemetry.md).
+
+---
+
+## State audit (`ace_audit.cfg`)
+
+Auditing belongs in every routine, not in a one-off script. [`klipper/ace_audit.cfg`](../klipper/ace_audit.cfg)
+is the reusable check.
+
+**Sensors first, flags second.** Flags are written by macros and can lie; switches cannot. The
+entry / post-gear pair is a truth table, not two independent booleans:
+
+| entry | post | meaning |
+|---|---|---|
+| 0 | 0 | EMPTY — nothing in the toolhead |
+| 1 | 0 | PARTIAL — at entry, not through the gears |
+| 1 | 1 | LOADED — through the gears, melt zone reachable |
+| 0 | 1 | **ANOMALY** — past the gears but not at entry: a stub in the nip, or a failed sensor |
+
+```gcode
+ACE_AUDIT              ; report, and set .ok / .why / .toolhead
+ACE_AUDIT STRICT=1     ; same, but raise so the calling routine aborts
+ACE_AUDIT QUIET=1      ; set the variables without printing
+```
+
+A routine that moves filament opens with `ACE_AUDIT STRICT=1`. A background loop that must not die
+calls plain `ACE_AUDIT` and branches on `printer['gcode_macro ACE_AUDIT'].ok` — as the drying
+roller does.
+
+**Calling it and reading the result must be two separate macro invocations.** Klipper renders a
+macro completely before executing any of it, so reading `.ok` inside the same render returns the
+*previous* pass's value.
+
+What it cross-checks: the truth table itself; `hot` / `parked` against the switches; that filament
+anywhere in the path has a recorded owner (`current_index`); that `hub_detect` filament belongs to a
+loaded or staged lane; that `ace_filament_pos` agrees with the sensors (`bowden` is the driver's
+UNLOADED state — only `splitter`/`toolhead`/`nozzle` assert filament in the path); per-lane
+`lane_pos` against slot status; that no lane is off its park datum from drying rotation; and any
+open intent that never committed.
