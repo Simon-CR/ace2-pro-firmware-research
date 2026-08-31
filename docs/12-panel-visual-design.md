@@ -806,3 +806,494 @@ header, or the footer, so a thumb has three fixed places to look.
 **What is deliberately absent from this screen**, and why, is §6.
 
 ---
+
+## 4. Every element traced, both directions
+
+### 4.1 The predicate vocabulary
+
+Every enabled-when expression in §4.3 is written from these, so the predicates are auditable rather
+than prose. All paths verified live 2026-08-31.
+
+| name | expression in live field names |
+|---|---|
+| `CONNECTED` | `ace_instance_0.connection_state == "connected"` |
+| `FRESH` | `ace_buffer_watch.stale == false` |
+| `PRESENT(i)` | `FRESH and ace_buffer_watch.inserted[i] == true` |
+| `STAGED(i)` | `save_variables.variables.ace_staged_mm[i] > 0` |
+| `LOADED(i)` | `ace.current_index == i` |
+| `CUR` | `ace.current_index` (−1 = none) |
+| `TGT` | `ace.target_index` (−1 = no change in flight) |
+| `PATH_FREE` | `ace_preload_guard.path_busy == false` |
+| `NO_OP` | `save_variables.variables.ace_op == ""` |
+| `PRINTING` | `print_stats.state in ("printing", "paused")` |
+| `SENSORS_OK` | `toolhead_entry.enabled and toolhead_postgear.enabled` — **false right now** |
+| `AT_TOOLHEAD` | `toolhead_entry.filament_detected or toolhead_postgear.filament_detected` |
+| `IMPOSSIBLE` | `SENSORS_OK and not toolhead_entry.filament_detected and toolhead_postgear.filament_detected` |
+| `EJECTING` | `printer["gcode_macro ACE_LANE_EJECT"].running == 1` |
+| `EJECT_TOOL` | `printer["gcode_macro ACE_LANE_EJECT"].tool` |
+| `JAM` | `ace_buffer_watch.jam == true`, tool `ace_buffer_watch.jam_tool` |
+| `AUDIT_OK` | `printer["gcode_macro ACE_AUDIT"].ok == 1` |
+| `AUDIT_RUN` | `printer["gcode_macro ACE_AUDIT"].toolhead != ""` |
+| `HOT` / `PARKED` | `save_variables.variables.filament_loaded_hot == 1` / `.filament_parked == 1` |
+| `PATH_CLEAR_FOR_CAL` | `not hub_detect.filament_detected and not toolhead_entry.filament_detected and not toolhead_postgear.filament_detected` |
+| `SPOOLMAN` | `mmu.spoolman_support != "" and /server/spoolman/status → spoolman_connected` |
+| `DRYING` | `ace_instance_0.dryer_status.status != "stop"` |
+| `AUTODRY` | `printer["gcode_macro ACE_AUTODRY"].active == 1` — **1 right now** |
+| `ROLLING` | `save_variables.variables.ace_dryroll_active == 1` |
+| `SUPPRESSED` | `printer["gcode_macro _ACE_SUPPRESSION_ARM"].armed_swapping == 1 or .armed_parking == 1` |
+
+**`AUDIT_RUN` is load-bearing.** `printer["gcode_macro ACE_AUDIT"]` reads `{ok: 1, why: "",
+toolhead: ""}` on a fresh boot — `ok` defaults to `1` before the audit has ever executed. Rendering
+that as a green *coherent* is a picture that lies. **The verdict shows `not run yet` in `--unknown`
+until `toolhead != ""`**, and the `Run audit` button takes primary rank while that is the case.
+
+### 4.2 Element → field path
+
+Extends chapter 11 §4.3. Rows marked **new** are elements this specification introduces; rows marked
+**corrected** replace a mapping in §4.3 that does not hold.
+
+| Element | Source |
+|---|---|
+| **Header** | |
+| unit name / vendor / firmware | **new** — `mmu_machine.unit_0.{name,vendor,version}`; fall back to `ace_instance_0.firmware` |
+| connection pill | `ace_instance_0.connection_state`, `.status` |
+| transport detail (tooltip) | **new** — `ace_instance_0.{model,usb_port,protocol}` |
+| path pill | `ace_preload_guard.path_busy` → `path busy · T{owner}` / `path clear` |
+| audit verdict pill | **new** — `printer["gcode_macro ACE_AUDIT"].{ok,why,toolhead}`, gated on `AUDIT_RUN` |
+| open-intent pill | **new** — `save_variables.variables.ace_op` (non-empty ⇒ `--fault`) |
+| in-flight pill | **new** — `ace.target_index != -1` ⇒ `toolchange T{cur}→T{tgt} in flight` |
+| job pill | `print_stats.{state,filename}`, `idle_timeout.state` |
+| suppression state | **new** — `printer["gcode_macro _ACE_SUPPRESSION_ARM"].{armed_swapping,armed_parking,seconds}` |
+| **Dryer strip** | |
+| temp / RH | `ace_instance_0.temp`, `.humidity` |
+| absolute humidity | Magnus from the two above (already implemented, `ace_index.html:143`) |
+| mode / target / remaining | `ace_instance_0.dryer_status.{status,state_detail,target_temp,duration,remain_time}` |
+| dryer progress rule | **new** — `1 − remain_time / duration`, drawn only when `duration > 0` |
+| auto-dry state | **new** — `printer["gcode_macro ACE_AUTODRY"].{active,target_rh,temp,interval}`; persisted seed `save_variables.variables.ace_autodry_*` |
+| dry-roll state | **new** — `save_variables.variables.{ace_dryroll_active,ace_dryroll_mode[i],ace_dryroll_pos[i]}`; policy `printer["gcode_macro _ACE_DRYROLL_VARS"].{interval,allow_printing}` |
+| **Lane tile** | |
+| swatch | `ace_instance_0.slots[i].color` — `[0,0,0]` = absent; fall back `mmu.gate_color_rgb[i]` |
+| lane present | `ace_buffer_watch.inserted[i]`, **unknown when `.stale`** — never `lane_empty` |
+| lane under tension | `ace_buffer_watch.at_rest[i]` |
+| ACE-reported slot word | `ace_instance_0.slots[i].status` (`empty` / `ready` / `feeding` / `shifting`) |
+| **staged mm** | **corrected** — `save_variables.variables.ace_staged_mm[i]`. §4.3 read `mmu.filament_position_per_gate[i]`; that array is 4 long while `num_gates` is 6, and it is a mirror rather than the source. `ace_staged_mm` is the persisted truth (§0.1) |
+| lane tube length | `save_variables.variables.ace_cal_park_to_hub[i]` if non-zero, else `ace_park_to_entry − ace_cal_hub_to_entry` (= 934.1) |
+| **lane state word** | **corrected** — derived in the panel from `PRESENT / STAGED / LOADED / AT_TOOLHEAD`. **Not** `mmu.filament_pos_per_gate` (collapsed, §2.1) and **not** `save_variables.ace_lane_pos` (holds the never-written value `parked`, §2.3) |
+| material / family | `mmu.gate_material[i]`, `mmu.gate_material_family[i]`; fall back `slots[i].material` |
+| spool name / id | `mmu.gate_filament_name[i]`, `mmu.gate_spool_id[i]` |
+| spool weight / sku | `ace_instance_0.slots[i].{total,current,sku}` |
+| print temp hint | **new** — `mmu.gate_temperature[i]`; range `slots[i].extruder_temp.{min,max}` |
+| RFID present | **new** — `ace_instance_0.slots[i].rfid` (drives the `Scan tags` affordance) |
+| consumed | **new** — `mmu.gate_consumed_mm[i]` |
+| **Path diagram** | |
+| lane fill fraction | `ace_staged_mm[i] / laneTube` |
+| shared-run owner | **corrected** — the lane where `ace_staged_mm[i] >= laneTube`, else `ace.current_index`. §4.3 and `ace_index.html:296` use `filament_pos_per_gate.findIndex(p => p >= 2)`, which returns −1 and indexes `slots[-1]` |
+| shared-run tip | sensor ladder (hub → entry → gears → melt); `ace_hub_encoder.distance_mm ÷ ace_cal_hub_to_entry` refines it between the hub and entry |
+| encoder motion marker | **new** — `ace_hub_encoder.moving`, `.pulses`, `.mm_per_pulse` (subscribed and unused today, §2.8) |
+| hub dot | `filament_switch_sensor hub_detect.filament_detected` + analog `.reading`; **`.enabled`** |
+| entry / gears dots | `filament_switch_sensor toolhead_entry` / `toolhead_postgear` `.filament_detected` + **`.enabled`** |
+| melt dot | `mmu.in_melt_zone` — labelled `derived`, no switch behind it |
+| calibration caption | `save_variables.variables.{ace_cal_hub_to_entry,ace_cal_park_to_entry,ace_cal_when,ace_cal_mm_per_pulse}` |
+| **Toolhead column** | |
+| cold-pull verdict | `mmu.cold_unload_ok` — see the QA flag in §4.4 |
+| hot / parked flags | `save_variables.variables.{filament_loaded_hot,filament_parked}` |
+| melt-zone length | `save_variables.variables.meltzone_mm` (22.0) |
+| cut geometry | **new** — `save_variables.variables.{crossbow_blade_to_nozzle,crossbow_postgear_to_blade,ptfe_postgear_to_nozzle}` |
+| **Banners** | |
+| jam | `ace_buffer_watch.{jam,jam_tool,last_event,offrest_seconds,armed,armed_tool}` |
+| sensor fault | the entry/post truth table (§2.2) plus `.enabled` on both |
+| eject in progress | `printer["gcode_macro ACE_LANE_EJECT"].{running,tool,do_home}` |
+| **Hand-fed strip** | `mmu.manual_tools`, `mmu.gate_status[i]`, `mmu.gate_material[i]`, `mmu.gate_filament_name[i]`, `mmu.gate_spool_id[i]`, `mmu.gate_color_rgb[i]` — **never** `filament_position_per_gate` (§0.1) |
+| **Spool picker** | `POST /server/spoolman/proxy {"request_method":"GET","path":"/v1/spool"}`; connection from `GET /server/spoolman/status` |
+| **Panel health** | **new** — `GET /ace/status.json`, written by `patch_mainsail.py` (§5.3) |
+
+Deleted from the panel by this specification: `mmu.filament_pos_per_gate` (collapsed),
+`ace_buffer_watch.lane_empty` (dead), `save_variables.ace_lane_pos` (holds a value nothing writes),
+`mmu.bowden_progress` (hardcoded `-1`, and load-shaped by construction — chapter 11 §2.4).
+
+### 4.3 Control table
+
+Every control the panel offers. **`gcode`** is the exact string sent. **`enabled-when`** is written in
+the §4.1 vocabulary. **`disabled reason`** is the verbatim string rendered beneath the control — the
+first matching row wins, and the strings are quoted here so they can be lifted into the
+implementation unchanged.
+
+Where the reason echoes a macro's own refusal, the macro's wording is used, because the operator
+should not have to learn two vocabularies for the same fact.
+
+#### Per-lane controls (lane tile, both surfaces)
+
+| Control | gcode | enabled-when | disabled reason (first match) |
+|---|---|---|---|
+| **Load** | `T{i}` | `CONNECTED and PRESENT(i) and not LOADED(i) and CUR == -1 and PATH_FREE and NO_OP and TGT == -1 and not EJECTING` | `not CONNECTED` → `the ACE is disconnected` · `not FRESH` → `lane sensors are stale — state is unknown` · `not PRESENT(i)` → `no filament in lane {i}` · `LOADED(i)` → `T{i} is already loaded` · `CUR >= 0` → `T{CUR} is loaded — park or eject it first` · `EJECTING` → `an eject is running on T{EJECT_TOOL}` · `not PATH_FREE` → `the shared path is busy` · `TGT != -1` → `toolchange T{CUR}→T{TGT} is still in flight — reconcile it first` · `not NO_OP` → `open intent: {ace_op} — recover before moving filament` |
+| **Park** (swap-ready) | `ACE_LANE_PARK T={i}` | `CONNECTED and LOADED(i) and AT_TOOLHEAD and PATH_FREE and NO_OP and not EJECTING` | `not LOADED(i)` → `T{i} is not the loaded lane` · `not AT_TOOLHEAD` → `nothing at the toolhead to park` · others as above |
+| **Retract → gate** | `ACE_LANE_PARK T={i} FORCE=1` | `CONNECTED and STAGED(i) and not LOADED(i) and not AT_TOOLHEAD and PATH_FREE and NO_OP and not EJECTING` | `not STAGED(i)` → `T{i} is already back at the gate` · `LOADED(i)` → `T{i} is loaded — use Park` · `AT_TOOLHEAD` → `filament is still at the toolhead — clear it first` |
+| **Eject** | `ACE_LANE_EJECT T={i}` | `CONNECTED and not EJECTING and (PRESENT(i) or AT_TOOLHEAD) and not (AT_TOOLHEAD and CUR >= 0 and CUR != i) and PATH_FREE` | `EJECTING and EJECT_TOOL != i` → `an eject is already running on T{EJECT_TOOL} — eject lanes one at a time` · `not PRESENT(i) and not AT_TOOLHEAD` → `T{i} is already empty and the path is clear` · `AT_TOOLHEAD and CUR >= 0 and CUR != i` → `the toolhead holds T{CUR}, not T{i}. Unload T{CUR} first.` |
+| **Eject (force)** | `ACE_LANE_EJECT T={i} FORCE=1` | shown **instead of** Eject when `AT_TOOLHEAD and (CUR == -1 or (not HOT and not PARKED))`, and enabled under the same terms except those two | caution line, always visible, never a disable: `no lane is recorded as loaded — confirm by eye that this strand is T{i}'s before forcing` |
+| **Abort eject** | `ACE_LANE_UNLOAD_ABORT` | `EJECTING` | `no eject is running` |
+| **Assign spool…** | `MMU_GATE_MAP GATE={i} SPOOLID={id}` | `SPOOLMAN` — **deliberately not gated on `PATH_FREE`, `PRINTING` or `TGT`**: `MMU_GATE_MAP` is metadata only and never moves filament (`ace_mmu_shim.py:1180`) | `not SPOOLMAN` → `Spoolman is not reachable` |
+| **Calibrate path** | `ACE_CALIBRATE_PATH T={i} FROM_PARK=1` | `CONNECTED and PATH_CLEAR_FOR_CAL and slots[i].status == "ready" and PATH_FREE and not PRINTING` | `hub_detect.filament_detected` → `hub_detect already shows filament — clear the path first` · same for `toolhead_entry` / `toolhead_postgear` · `slots[i].status != "ready"` → `lane T{i} is '{status}', not ready` · `PRINTING` → `not while a print is running` |
+| **Plan swap to T{i}** | `ACE_PLAN_SWAP TOOL={i}` | `PRINTING and PRESENT(i) and not LOADED(i) and i not in mmu.manual_tools` | `not PRINTING` → `only during a print — otherwise just Load` · `i in manual_tools` → `T{i} is hand-fed — the machine cannot feed it` · `LOADED(i)` → `T{i} is already loaded` |
+
+#### Global controls (header, footer, banners)
+
+| Control | gcode | enabled-when | disabled reason |
+|---|---|---|---|
+| **STOP ALL** | `ACE_STOP_ALL` **(new macro — §4.5)** | **always.** No predicate, in any state, including disconnected, stale and fault | — |
+| **Run audit** | `ACE_AUDIT` | always | — |
+| **Recover** | `MMU_RECOVER GATE={i}` from a lane tile; `MMU_RECOVER` from the footer | `CONNECTED` | `not CONNECTED` → `the ACE is disconnected` |
+| **Clear op** | `ACE_CLEAR_OP` | `not NO_OP` | `no open intent recorded` |
+| **Unlock toolchange** | `MMU_UNLOCK` | `TGT != -1` | `no toolchange is in flight` |
+| **Reconcile target** | `ACE_RECONCILE_TARGET` | `TGT != -1` | `no toolchange marker to resolve` |
+| **Clear suppression** | `_ACE_SUPPRESSION_DISARM` | **always.** Deliberately not gated on `SUPPRESSED` — the reason you press it is that the state model is wrong, and it has no refusals | state line beneath, always visible: `suppression: armed (swapping)` / `armed (parking)` / `clear` |
+| **Clear jam on T{n}** | `ACE_BUFFER_DISARM` | `JAM` | `no jam is latched` |
+| **Buffer state** | `ACE_BUFFER_STATE` | always | — |
+| **Scan tags** | `ACE_SCAN_TAGS` | `CONNECTED and any(slots[i].status != "empty")` | `every lane reads empty — nothing to scan` |
+| **Preload guard status** | `ACE_PRELOAD_GUARD_STATUS` | always | — |
+| **Printer state** | `PRINTER_STATE` | always | — |
+| **Normalize lanes** | `ACE_LANE_NORMALIZE ALL=1` | `CONNECTED and PATH_CLEAR_FOR_CAL and not PRINTING` | `{sensor} shows filament — clear the path before parking` · `not while a print is running` |
+| **Select bypass** | `MMU_SELECT_BYPASS` | `AT_TOOLHEAD or hub_detect.filament_detected` | `no filament at the hub or the toolhead — nothing to mark as bypass` |
+| **Clear bypass** | `MMU_SELECT_BYPASS CLEAR=1` | `save_variables.variables.ace_bypass_loaded == 1` | `no bypass is selected` |
+| **Dry {preset}** | `ACE_DRY MATERIAL={family}` or `ACE_DRY TEMP={t} MINUTES={m}` | `CONNECTED and not DRYING` | `not CONNECTED` → `the ACE is disconnected` · `DRYING` → `the dryer is already running` |
+| **Stop drying** | `ACE_DRY_OFF` | `DRYING or AUTODRY` | `the dryer is idle and auto-dry is off` |
+| **Auto-dry** | `ACE_AUTODRY MATERIAL={family}` | `CONNECTED and not AUTODRY` | `auto-dry is already holding {target_rh} %RH` |
+| **Roll: start** | `ACE_DRYROLL_START` | `CONNECTED and AUDIT_RUN and AUDIT_OK and not (PRINTING and _ACE_DRYROLL_VARS.allow_printing == 0)` | `not AUDIT_OK` → `state is not coherent: {ACE_AUDIT.why}` · `not AUDIT_RUN` → `run an audit first — coherence has not been checked` · printing case → `rolling is disabled during a print` |
+| **Roll: stop** | `ACE_DRYROLL_STOP` | `ROLLING` | `rolling is not active` |
+| **Roll: mode** | `ACE_DRYROLL_MODE T={i} MODE={off\|sweep\|spin}` | `CONNECTED` | `the ACE is disconnected` |
+| **Cleanup stale vars** | `ACE_CLEANUP_STALE_VARS` then `ACE_CLEANUP_STALE_VARS CONFIRM=1` | `not PRINTING` | `not while a print is running` |
+| **Reset shared bus** | `ACE_RESET_SHARED_BUS_BINDINGS` | `not PRINTING` | `not while a print is running` |
+
+Two entries in that table are **friction preserved on purpose**, and they are called out so a future
+pass does not tidy them away:
+
+- **`ACE_CLEANUP_STALE_VARS` stays two-step.** Its own docstring says CONFIRM exists "because stale
+  `ace_inventory_N` keys hold user-entered spool data that cannot be rebuilt". The panel shows the
+  dry-run list, then a separate destructive confirm. It is not a single button.
+- **`Eject (force)` never becomes the default.** It appears only in the two states the macro itself
+  allows FORCE to override, it keeps the destructive rank, and it carries the "confirm by eye"
+  caution permanently — not as a dismissible toast. `ACE_LANE_EJECT`'s own refusal is three lines
+  long for a reason.
+
+Two more are **new gating this specification adds**, and both are conservative rather than permissive:
+`Load` requires `CUR == -1` (the macro would accept a direct swap, but a panel that offers Load on
+lane 3 while lane 2 is loaded invites a toolchange the operator did not mean), and every motion
+control requires `FRESH`.
+
+### 4.4 Flagged for QA — not decided here
+
+1. **`mmu.cold_unload_ok` has zero consumers and `mmu.in_melt_zone` has one, and it is advisory.**
+   The heat-vs-cold decision — the single most damaging call on this machine — is re-derived
+   independently, in duplicated Jinja, inside both `ACE_LANE_EJECT` (`ace_unload.cfg:156`) and
+   `ACE_LANE_PARK` (`ace_toolchange.cfg:229`), from `filament_loaded_hot` + `filament_parked` +
+   post-gear. The shim publishes an answer nobody reads. **Which of the two is authoritative is a QA
+   call, not a UX one.** Until it is settled, the panel displays *both*: `mmu.cold_unload_ok` labelled
+   `driver says`, and the flag-derived verdict labelled `state says`, and when they disagree it draws
+   a `--staged` warning rather than picking a winner. A panel that picks one and is wrong is worse
+   than a panel that shows the disagreement.
+2. **Whether a latched jam should block the destructive controls** (§2.6).
+3. **Manual jog** — `ACE_RAW_FEED` and `FORCE_MOVE STEPPER=extruder`. Left flagged exactly as
+   chapter 11 §4.4 left it. **This specification does not draw a manual-jog screen.**
+4. **`Load` requiring `CUR == -1`** — see above. If the intent is that the panel should offer a
+   direct lane-to-lane toolchange, that predicate loosens to `CUR != i`.
+
+### 4.5 The one new command this design requires
+
+`ACE_STOP_ALL`. There is no single command that stops the ACE, and the panel must not send four
+lines of gcode to make one button work.
+
+```
+[gcode_macro ACE_STOP_ALL]
+description: Stop every ACE motion at once: feed, retract, and feed assist on all four lanes
+gcode:
+    {% for i in range(4) %}
+        ACE_STOP_FEED T={i}
+        ACE_STOP_RETRACT T={i}
+        ACE_DISABLE_FEED_ASSIST T={i}
+    {% endfor %}
+    ACE_LANE_UNLOAD_ABORT
+    RESPOND MSG="[ACE] all motion stopped: feed, retract and assist disabled on T0-T3"
+```
+
+Three notes. `ACE_STOP_FEED` and `ACE_STOP_RETRACT` swallow their own exceptions
+(`commands.py:659,700`), so they cannot abort the loop. `ACE_DISABLE_FEED_ASSIST` genuinely raises on
+an invalid slot (`commands.py:897`) — `0..3` are always valid on this machine, so the loop is safe,
+but the range must not be widened to `num_gates`, because gates 4 and 5 are hand-fed and have no
+actuator. And `ACE_LANE_UNLOAD_ABORT` is included because a running eject is ACE motion; **feed
+assist is motion, and so is an eject in progress.**
+
+Size: XS. It is a prerequisite for the touchscreen's most important button.
+
+---
+
+## 5. Delivery
+
+### 5.1 The decision
+
+**Keep `/ace/` as a single hand-written `ace_index.html`. Do not introduce a build step. Take the
+`/ace/` link out of the bundle patch entirely and put it in `.theme/navi.json`.**
+
+### 5.2 The two options, costed honestly
+
+**Option A — extend `ace_index.html` (recommended).**
+
+The specified panel is roughly 60–90 KB of inline HTML, CSS and JS, up from 14.7 KB. It stays one
+file with no dependencies, which buys three things that matter here:
+
+- `patch_mainsail.py`'s restore is a single `shutil.copy`. It keeps working unchanged.
+- The panel can be edited over SSH, from a phone, at 2 am, with a spool in the other hand. That is
+  not a hypothetical on this machine.
+- No CDN, so the CSP-free same-origin story stays trivial and the panel works with the printer
+  offline.
+
+Cost: no component model, no type checking, and a single file that a careless edit can break
+wholesale. Mitigations that are part of this slice — a `<template>`-per-component structure, one
+`render()` driven by a single merged state object (the existing pattern), and the state switcher from
+the mockup retained behind `?mock=1` so every state can be exercised without waiting for the machine
+to enter it.
+
+**Option B — rebuild as a small structured app (Vite + Preact/Vue, ~200 KB output).**
+
+Better component ergonomics, worse everywhere else:
+
+- **It breaks the 15-minute cron restore as written.** The output is a hashed bundle plus an assets
+  directory, so `restore_panel()` becomes a tree sync, and the source of truth moves from a file the
+  printer holds to a build artefact the printer cannot regenerate. A Mainsail update that wipes
+  `/home/simon/mainsail` would restore whatever was last built and copied — which may be older than
+  the source in git.
+- **It puts a build machine in the loop.** Changing a button label needs node and a deploy, on a
+  machine where the fix often needs to happen while standing at the printer.
+- It does not survive a Mainsail update any better: neither option couples to Mainsail internals.
+  The nozzle-dot bundle patch is a separate concern (§5.3) and is unaffected by either choice.
+
+The one argument for B is that the specified panel is genuinely more complex than the current one.
+It is not enough. **Recommend A.**
+
+### 5.3 Where the `/ace/` link comes from — and it is not the patcher
+
+Chapter 11 §5-Missing-#13 proposes linking `/ace/` from Mainsail via `patch_mainsail.py`, since it
+already edits the bundle. **There is a better route, verified on the live machine 2026-08-31.**
+
+Mainsail reads a **user navigation file** at `~/printer_data/config/.theme/navi.json`. Confirmed in
+the live v2.19.0 bundle (`mainsail/assets/index-jNhnvCHe.js`):
+
+```js
+sidebarNaviFileChanged(e){ this.customNaviLinks=[],
+  e&&(await fetch(e).then(e=>e.json()).catch(e=>{
+      throw window.console.error(`Unable to parse .theme/navi.json.`),e
+  })).forEach(e=>{ this.customNaviLinks.push({
+      title: e.title ?? `Unknown`, icon: e.icon ?? da,
+      href: e.href ?? `#`, target: e.target, position: e.position ?? 999 }) }) }
+```
+
+So:
+
+```json
+[ { "title": "ACE", "href": "/ace/", "icon": "mdi-printer-3d-nozzle", "position": 45 } ]
+```
+
+Why this is the right answer:
+
+- `~/printer_data/config/.theme/` is **outside** `/home/simon/mainsail`, so a Mainsail
+  `update_manager type: web` extraction cannot wipe it. **It needs no cron, no patcher, no regex.**
+- It is a documented Mainsail feature reading a JSON file, not a regex against minified JS. It cannot
+  fail silently in the way §2.7 describes; if the JSON is malformed Mainsail logs it to the console.
+- The directory already exists on this machine (`custom.css`, 7.6 KB, under its own git repo), so the
+  mechanism is already proven to load here.
+- It applies to both instances, because both read their own config directory.
+
+Effort: **XS.** One file, four lines. This deletes a work item rather than adding one.
+
+**The bundle patch is demoted, not deleted.** It still owns the nozzle dot inside Mainsail's own MMU
+card, which nothing else can add. But it stops being the only route to `/ace/`, and it must stop
+failing silently:
+
+- `patch_bundle()` returns `"no MMU bundle found"` both when there is no bundle and when the regex
+  missed a reshaped one, and `main()` returns 0 either way. Split those into distinct returns and
+  exit non-zero on the second.
+- Write `~/printer_data/config/panel/patch_status.json` on every run — `{ran, ok, site, bundle,
+  message, when}` — and copy it to `<site>/ace/status.json`. **The panel reads it and shows a
+  `--fault` pill reading `Mainsail patch failed — nozzle dot missing` when `ok` is false.** The
+  monitoring for a silent failure belongs on the screen the owner already has open.
+- Correct the docstring: the trigger is `crontab` `*/15 * * * *` plus `@reboot sleep 60`. The
+  `ace-panel-patch.path` unit it names does not exist.
+
+### 5.4 The phone
+
+`/ace/` gains a `manifest.webmanifest` and an apple-touch icon inside its own directory. Installed to
+the home screen it opens standalone, on the same origin, with no address bar — which is the closest
+thing to an ACE app the machine can have, and it costs one JSON file and one PNG. XS.
+
+---
+
+## 6. Web and touchscreen: the split, and the prompt rules
+
+### 6.1 Where the hands are
+
+| | Web `/ace/` | KlipperScreen |
+|---|---|---|
+| posture | desk or phone, both hands, time to read, a keyboard within reach | standing at the machine, gloves on, often mid-print, one thumb, no keyboard |
+| what it is for | understanding and configuring | acting and recovering |
+
+**Hard requirement, non-negotiable: the touchscreen is fully self-sufficient, including answering
+prompts.** A prompt raised while the owner is at the machine must be answerable at the machine. He
+has called it out as actively annoying when a dialog on the web blocks the touchscreen.
+
+**On the touchscreen, because it is where you are when you need it:**
+see all four lanes and where their filament is · Load · Park · Eject · Eject (force) · **STOP ALL** ·
+Clear jam · Run audit and see its one-line verdict · Recover · Clear op · Clear suppression · dryer
+on/off · **every prompt the machine can raise.**
+
+**Web only, and why each:**
+
+| Web only | Why |
+|---|---|
+| spool picker | a searchable list of dozens, plus a text filter. A keyboard task |
+| material / colour / temperature editing | Spoolman is the better source of truth, and `acepro.py` needs three nested sub-screens and a numeric keypad to do it badly |
+| `ACE_CALIBRATE_PATH`, `ACE_LANE_NORMALIZE` | minutes long, needs a verified-clear path, done quarterly |
+| full audit output, `ACE_PRELOAD_GUARD_STATUS`, `ACE_BUFFER_STATE` | multi-line diagnostics. The touchscreen gets the verdict, not the transcript |
+| swap history and timings (`ace_swap_timing`) | retrospective, never urgent |
+| endless-spool and RFID-sync configuration | set once |
+| `ACE_CLEANUP_STALE_VARS` | destroys unrecoverable user data, deliberately two-step |
+| `ACE_RESET_SHARED_BUS_BINDINGS` | recovery from a bus fault, done with a laptop open |
+
+The test, unchanged from chapter 11: **you just opened the ACE lid, or you are watching a swap go
+wrong.** If it is neither, it is web.
+
+### 6.2 Prompt design rules
+
+Derived from the measured KlipperScreen constraints (chapter 11 §4.6). These are the rules; §6.3 is
+a worked example.
+
+1. **The LAST `prompt_text` carries the decision.** KlipperScreen keeps only that one
+   (`prompts.py:37` overwrites rather than appends). Everything before it is web-only detail.
+2. **Cap the dialog at three `prompt_text` lines.** More is Mainsail-only noise, and it costs nothing
+   to send the rest to the console with `RESPOND MSG=`.
+3. **The last line follows a fixed priority ladder** (§6.3), so the operator learns where to look
+   instead of reading whatever happened to be emitted last.
+4. **Four buttons per group, two groups maximum.** `set_max_children_per_line(min(4, n))`.
+5. **A button payload may carry parameters** — `ACE_LANE_EJECT T=2 FORCE=1` works today — **but must
+   contain no colon.** The action line is split on `:`, so a payload with its own `MSG=` and a colon
+   silently does nothing. Three buttons shipped with that bug in August 2026.
+6. **Every button label names its lane and its verb** (`T2 park`, never `Park`). On the touchscreen
+   the label is the *only* context; the text line is one line and it is about something else.
+7. **A destructive button never shares a group row with its safe counterpart.** Row one is the safe
+   actions, row two is the destructive ones. Always the same way round.
+8. **A dialog that names a command in its text must offer that command as a button in the same
+   dialog.** The dialog is already open and already knows the tool number.
+9. **Never ask what the sensors answer.** Derive it, state the conclusion, and prompt only for a
+   genuine decision — two clear options, each saying what it will do.
+10. **Always `prompt_end` before `prompt_begin`,** or the dialog never renders and the lines land in
+    the console as raw text.
+
+### 6.3 Worked example: `ACE_LANES` rewritten
+
+**What it does today** (`ace_ui.cfg:20-128`, read live). The idle branch emits **10 or 11
+`prompt_text` lines**, four eject buttons, an optional park button, and three footer buttons. On
+KlipperScreen the operator sees the *last* line — typically `T3: empty` — above **four destructive
+EJECT buttons and nothing to choose between them.** There is no Load button anywhere in the dialog
+built for lane actions, and the jam line prints the string `ACE_BUFFER_DISARM` instead of offering it.
+
+**And the busy branch crashes.** `ace_ui.cfg:48` reads
+`printer['gcode_macro ACE_LANE_EJECT'].steps`. `ACE_LANE_EJECT` declares only `tool`, `running` and
+`do_home` (`ace_unload.cfg:78-82`); `steps` was removed with the macro-side chunk loop on 2026-08-27
+and the UI reference was not. The Jinja render raises `UndefinedError`, so **the dialog does not
+appear at all while an eject is running — the one state where its Abort button is the point.** The
+same dangling reference sits in `ace_unload.cfg:110`'s refusal message. Fixing both is part of this
+rewrite, not a follow-up.
+
+**The rewrite.** Three text lines, ending with the decision. Two button rows, safe then destructive.
+Lane state moves into the labels, where the touchscreen can see it.
+
+```
+    RESPOND TYPE=command MSG="action:prompt_end"
+    RESPOND TYPE=command MSG="action:prompt_begin ACE Lanes"
+
+    # Line 1 - all four lanes on one line. Web reads it; the touchscreen discards it.
+    RESPOND TYPE=command MSG="action:prompt_text T0 empty · T1 at gate · T2 staged 884/934mm · T3 empty"
+
+    # Line 2 - the shared path and the sensors, including any that are switched OFF.
+    RESPOND TYPE=command MSG="action:prompt_text path clear · toolhead empty · entry sensor OFF · postgear no"
+
+    # Line 3 - THE DECISION. Priority ladder below. This is the only line the touchscreen shows.
+    RESPOND TYPE=command MSG="action:prompt_text T2 is staged 50mm short of the hub. Cold pull is legal."
+
+    # Row 1: safe actions, one per lane, label carries the state.
+    RESPOND TYPE=command MSG="action:prompt_button_group_start"
+    RESPOND TYPE=command MSG="action:prompt_button T0 empty|ACE_LANES|secondary"
+    RESPOND TYPE=command MSG="action:prompt_button T1 load|T1|primary"
+    RESPOND TYPE=command MSG="action:prompt_button T2 retract|ACE_LANE_PARK T=2 FORCE=1|warning"
+    RESPOND TYPE=command MSG="action:prompt_button T3 empty|ACE_LANES|secondary"
+    RESPOND TYPE=command MSG="action:prompt_button_group_end"
+
+    # Row 2: destructive and recovery. Never mixed with row 1.
+    RESPOND TYPE=command MSG="action:prompt_button T1 eject|ACE_LANE_EJECT T=1|error"
+    RESPOND TYPE=command MSG="action:prompt_button T2 eject|ACE_LANE_EJECT T=2|error"
+    RESPOND TYPE=command MSG="action:prompt_button Audit|ACE_AUDIT|info"
+    RESPOND TYPE=command MSG="action:prompt_button STOP ALL|ACE_STOP_ALL|error"
+
+    RESPOND TYPE=command MSG="action:prompt_footer_button Refresh|ACE_LANES|info"
+    RESPOND TYPE=command MSG="action:prompt_footer_button Close|PROMPT_CLOSE|secondary"
+    RESPOND TYPE=command MSG="action:prompt_show"
+```
+
+**The priority ladder for line 3.** First match wins. This is the whole design of the dialog: the
+operator always reads one line, and it is always the most urgent true thing.
+
+| # | condition | line 3 |
+|---|---|---|
+| 1 | `JAM` | `JAM latched on T{jam_tool}. Clear it before anything moves.` |
+| 2 | `IMPOSSIBLE` | `FAULT: post-gear sees filament, entry does not. Broken strand or a dead switch — move nothing.` |
+| 3 | `EJECTING` | `Eject running on T{EJECT_TOOL}. Abort it, or wait.` |
+| 4 | `AT_TOOLHEAD and CUR == -1` | `Filament at the toolhead that no lane claims. Force-eject only once you can see whose it is.` |
+| 5 | `not NO_OP` | `Open intent: {ace_op}. Recover before moving filament.` |
+| 6 | `TGT != -1` | `Toolchange T{CUR}→T{TGT} never finished. Reconcile it before printing.` |
+| 7 | `AT_TOOLHEAD and not HOT and not PARKED` | `Sensors show filament but the state says unloaded. Audit before moving anything.` |
+| 8 | `CUR >= 0 and HOT` | `T{CUR} is loaded, tip in the melt zone. Park to swap; eject to change the spool.` |
+| 9 | `CUR >= 0` | `T{CUR} is loaded and parked cold. A cold pull is legal.` |
+| 10 | `any STAGED(i)` | `T{i} is staged {gap}mm short of the hub. Cold pull is legal.` |
+| 11 | `any PRESENT(i)` | `Nothing loaded. T{i} is at the gate and ready to load.` |
+| 12 | else | `No filament in any lane. Insert a spool, then Load.` |
+
+Rows 2, 5, 6 and 7 all end in *stop and check*, and none of them exists in the dialog today.
+
+**Buttons are built dynamically**, four per row maximum:
+
+- Row 1, per lane: `T{i} load` when `Load` is enabled · `T{i} park` when loaded and at the toolhead ·
+  `T{i} retract` when staged · `T{i} empty` (secondary, re-renders the dialog) otherwise.
+- Row 2: `T{i} eject` for each ejectable lane (or `T{i} force` in the orphan case), then `Audit`, then
+  `STOP ALL` — trimmed from the right if more than four are needed, because `STOP ALL` and `Audit`
+  yield to a lane that genuinely needs ejecting.
+- **When the ladder returns row 1 or 2** (jam, impossible pair) the rows collapse to exactly two
+  buttons: `Clear jam on T{n}` / `Audit`, or `Audit` / `Query sensors`. In a fault the dialog stops
+  offering choices and offers the next step.
+
+Net effect: **10–11 text lines → 3; the touchscreen goes from one arbitrary line and four destructive
+buttons, to one decisive line and a safe row above a destructive row.** And `Load` exists.
+
+---
+
+## 7. Sized and sequenced
+
+Ordered so something visibly better lands early. Each slice is independently shippable and each one
+changes what the owner sees.
+
+| # | Slice | Size | What he sees after it |
+|---|---|---|---|
+| **0** | `.theme/navi.json` — an `ACE` entry pointing at `/ace/` (§5.3) | **XS** | An **ACE item in Mainsail's sidebar**, on both instances, that survives every update. The panel stops being a URL you have to remember. Same day. |
+| **1** | Truth pass on the existing panel: read `ace_staged_mm`; delete `laneState()`'s "in ACE, not fed"; fix the shared-run owner; draw entry=0/post=1 as a fault; render `enabled:false` as `sensor off`; drop `lane_empty` | **S** | Lane 2 stops being described as *"in ACE, not fed"* beside a diagram drawn 94.6 % full. **The panel stops contradicting itself.** No new pixels, and the biggest lie is gone. |
+| **2** | `ACE_STOP_ALL` (§4.5) + the `ACE_LANES` rewrite (§6.3), including the `.steps` crash | **S** | The touchscreen dialog becomes usable: one decisive line, a Load button, a jam button, and one control that stops everything. The dialog appears during an eject instead of crashing. |
+| **3** | The visual language: tokens, type, spacing, theme toggle, header + dryer strip, lane tiles as objects, hand-fed strip, redrawn path diagram. Still read-only | **M** | **The panel looks like the mockup.** This is the slice that answers "something nice done". |
+| **4** | Buttons on `/ace/`: Load / Park / Retract / Eject / Eject (force) per lane, the footer bar, the fault and jam banners — all with §4.3's predicates and verbatim reasons | **L** | **The console stops being necessary.** Every disabled control says why. |
+| **5** | Dryer and dry-roll controls on the strip; the prose paragraph moves into this document | **S** | Drying starts and stops from the panel. The dryer stops occupying a quarter of the page to say nothing. |
+| **6** | Patcher hardening: distinct return values, non-zero exit, `status.json`, corrected docstring — plus the panel's health pill (§5.3) | **XS** | A red pill when a Mainsail update breaks the nozzle dot, instead of fifteen minutes of silence and then nothing. |
+| **7** | Spool picker → `MMU_GATE_MAP` (§2.9) | **M** | Assigning a spool is a list with swatches and weights, not a command line named in four error messages. |
+| **8** | `manifest.webmanifest` + icon in `/ace/` (§5.4) | **XS** | An ACE icon on the phone home screen that opens standalone. |
+| **9** | KlipperScreen: the §3.3 screen — either by fixing `acepro.py` (the `TR` command that does not exist, the dead `ace_pro_control` lock) or by building it fresh to this layout | **M–L** | **The machine gains a control panel.** Today there is none: `acepro.py` has never been installed. |
+| **10** | Stub-or-hide pass on the 13 unimplemented `MMU_*` commands the Mainsail card sends (chapter 11 §2.9) | **M** | The Happy-Hare card stops offering buttons that error, and stops offering one that fails silently. |
+
+Slices 0–2 are a single session and all three are visible. Slice 3 is the one he asked for. Slices 4
+and 9 are the ones that change what the machine can do.
+
+---
+
+**Ends.** The rendered proof is at [`examples/ace-panel-mockup/index.html`](../examples/ace-panel-mockup/).
