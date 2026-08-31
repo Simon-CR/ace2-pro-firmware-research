@@ -1591,101 +1591,182 @@ This is the hard part, and it is where the current panel already fails: it print
 beside a diagram it draws 94.6 % full. **Position is derived, and it is only partially knowable.**
 Confidence is therefore a first-class visual property, not a footnote.
 
-Five landmarks, four segments, and each segment has a different epistemic status:
+Five landmarks, four segments, and each has a different epistemic status. **The uninstrumented run is
+the one between the ACE and the hub — not, as one might assume, the long bowden past it.**
 
-| segment | bounded by | what is actually known |
+| segment | what is actually known | tier |
 |---|---|---|
-| ACE edge → hub | lane feed telemetry, then `hub_detect` | reckoning from commanded length (`ace_staged_mm`), **confirmed at the far end** by a switch |
-| hub → entry | `hub_detect`, `toolhead_entry` | **no sensor anywhere in this run.** `ace_hub_encoder` counts pulses at the hub, so travel *through* the hub is measured, but nothing observes the tip once it is past |
-| entry → gears | `toolhead_entry`, `toolhead_postgear` | two switches ~18 mm apart; position within is reckoned but the run is short |
-| gears → melt | `toolhead_postgear`, nothing | **no switch at all.** `mmu.in_melt_zone` is *derived*, from state flags, not observed |
+| **ACE edge → hub** | **Nothing is instrumented here at all.** `ace_preload_guard.py:59` says so outright: *"Nothing between the ACE and the hub is instrumented, so a lane pushed part-way down its bowden is invisible to every sensor."* `staged` is host-side commanded-length arithmetic (`_track`, `:877`) with **no absolute reference**, corrected only when the tip trips `hub_detect`. On 2026-08-21 it was ~290 mm out and reported a lane Unloaded with 717 mm in its tube. | **reckoned**, and it is the weak one |
+| **hub → entry** | **Measured.** The guard zeroes the hub encoder on `hub_detect`'s rising edge (`:622`), so `ace_hub_encoder.distance_mm` is literally millimetres past the hub, over a calibrated 555.9 mm (596 pulses × 0.93266). | **measured** |
+| **entry → gears** | Two real switches 20 mm apart. Position within is reckoned, but the run is short. | measured at both ends |
+| **gears → melt** | **No switch at all.** `mmu.in_melt_zone` is *derived* from state flags. | **inferred** |
 
-Four confidence tiers, each drawn differently, and the drawing is not optional decoration — it is
-what stops the picture lying:
+`hub_detect` itself is synthetic — an ADC threshold on `temperature_sensor rdm_detect` polled at
+~0.3 s, which is **up to ~18 mm of lag at 60 mm/s** (`ace_hub_detect.py:11`). That is the tolerance on
+the one landmark that re-anchors everything else, and it is a real number the band can be drawn from
+rather than a guess.
+
+Four confidence tiers, each drawn differently, and the drawing is not decoration — it is what stops
+the picture lying:
 
 | tier | when | drawn as | label |
 |---|---|---|---|
-| **measured** | a switch at that landmark is lit and enabled | solid 8 px fill up to a solid dot | the landmark name |
-| **reckoned** | commanded-length arithmetic, with a switch confirming which segment it is in | solid fill, then a **± band** in the lane colour at 45 % whose width is the stated tolerance | `884 ±20 mm` |
-| **inferred** | the tip is in a segment with no sensor and no encoder coverage | **hatched band spanning the entire segment**, no dot anywhere | `somewhere between hub and entry` |
+| **measured** | a switch at that landmark is lit and enabled, or the encoder covers the run | solid 8 px fill to a solid dot | the landmark name |
+| **reckoned** | `staged` arithmetic — i.e. anywhere in the ACE → hub run | solid fill, then a **± band** in the lane colour at 45 % | `884 ±18 mm · reckoned` |
+| **inferred** | a segment with neither switch nor encoder — past the gears | **hatched band spanning the whole segment**, no dot | `somewhere past the gears` |
 | **unknown** | `ace_buffer_watch.stale`, or a bounding sensor has `enabled == false` | whole ladder hatched in `--unknown` | `unknown` |
 
 Rules that follow, and they are absolute:
 
 1. **Never draw a dot in an inferred segment.** A dot is a claim of position. The band is the claim
    the sensors actually support.
-2. **The ± band is drawn even when it is small.** Hiding it when the tolerance is 5 mm teaches the
-   reader that a solid edge means certainty, which then makes the 20 mm case unreadable.
-3. **A disabled sensor collapses both segments it bounds to *unknown*, not to *clear*.** Live today:
-   `toolhead_entry.enabled == false`, so the hub → entry and entry → gears runs are both unknown
-   right now, and the panel must say so.
-4. **`mmu.in_melt_zone` is labelled `derived` wherever it appears.** It is the only landmark with no
-   switch behind it, and it is the one that decides heat-versus-cold.
-5. **The tolerance is a stated number, not a vibe.** Until it is measured it is declared in the
-   panel's own constants and shown, so a wrong tolerance is visible and correctable rather than
-   invisible and believed.
+2. **The ± band is drawn even when small.** Hiding it at 5 mm teaches the reader that a solid edge
+   means certainty, which then makes the 18 mm case unreadable.
+3. **A disabled sensor collapses both segments it bounds to *unknown*, not to *clear*.** Live today
+   `toolhead_entry.enabled == false`, so the hub → entry and entry → gears runs are both unknown right
+   now and the panel must say so.
+4. **`mmu.in_melt_zone` is labelled `derived` wherever it appears.**
+5. **`staged` is a floor, never a measurement.** `ace_mmu_shim.py:499` — *"treat it as a floor on where
+   filament is, never as a measurement."* The panel's word for it is `at least`, not `at`.
 
-### 9.3 Destination controls
+**Work item this exposes, and it is a good one.** `GET_FEED_INFO` (cmd 76) is in the ACE2 catalog and
+already decoded to `{motor_counts, magnitude_mm, moved_mm}` per slot — **values measured by the ACE
+itself**, not echoes of the command (a 723 mm retract reported 733 mm delivered). **Nothing polls it
+and no status field exposes it.** Publishing it would turn the ACE → hub run from reckoned into
+measured, which is the single largest available improvement to the headline display the owner asked
+for. Sized **S** in the driver, and it is the only way `staged` stops being dead reckoning.
 
-Five landmarks; the operator gets a button per reachable one, on every lane.
+### 9.3 Destination controls — and the three that have no command
 
-**Single-occupancy is the frequent, concrete instance of disabled-with-a-reason.** The hub and the
-shared run take one lane at a time. `park at hub` on T1 while T2 owns the hub is not an error to be
-discovered by pressing — it is a greyed button reading **`T2 is at the hub — retract it first`**.
-The same applies to `entry` and `gears`, and to `load`.
+Five landmarks; the operator gets a button per reachable one, on every lane. **Surveying the macro
+set for what actually lands a tip at each destination produced an uncomfortable result, and it is
+better found here than after shipping four buttons that lie about where they go.**
 
-Buttons never move between states; only their enablement, their label and their reason change
-(§2.1). A destination the machine has **no command for** is rendered disabled with the reason
-`no command exists for this destination yet` rather than omitted — an omission reads as "not
-possible on this machine", which is a different and wrong claim. §9.4 says which those are.
+| Chip | Command | Where the tip actually ends | Verdict |
+|---|---|---|---|
+| **`stage`** | `ACE_LANE_NORMALIZE T={i}` | **50 mm short of the hub** (`park_offset_mm: 50`), on the lane side | Exists. **Label it `stage`, not `edge` and not `hub`** — those would both be lies. |
+| **`park`** | `ACE_LANE_PARK T={i} FORCE=1` | **~723 mm back from entry**, behind the hub, still gripped (`clear_hub_mm: 723`) | Exists, and is the real "clear of the hub" destination. |
+| **`load`** | `T{i}` | **the nozzle** | Exists. |
+| **`gears`** | `T{i}` then `FILAMENT_PARK` | on `toolhead_postgear`, cold side | Exists only as a **two-macro sequence** that goes to the nozzle first and retracts. Offered as one chip labelled `load → park at gears`, so the route is not concealed. |
+| **`eject`** | `ACE_LANE_EJECT T={i}` | out of the lane, needs hand re-insertion | Exists. |
+| ~~`ACE edge`~~ | — | — | **No command.** Eject overshoots past the INSERT switch and leaves the lane `empty`; `ACE_LANE_RANGE` finds the boundary and immediately feeds back. **Disabled, reason: `no command parks a tip at the gate and leaves it gripped`.** |
+| ~~`hub`~~ | — | — | **No command.** `ACE_LANE_NORMALIZE` deliberately backs off 50 mm. **Disabled, reason: `no command parks a tip on the hub — stage stops 50 mm short`.** |
+| ~~`entry`~~ | — | — | **No plain command.** `ACE_MEASURE_BOWDEN` does land the tip at entry, but it is a *calibration* command that overwrites `ace_park_to_entry`; using it as a jog target would corrupt the calibration. **Disabled, reason: `no plain feed-to-entry command — ACE_MEASURE_BOWDEN would overwrite the calibration`.** |
 
-### 9.4 Jog — the position, argued
+**Three of the five requested destinations have no macro behind them.** That is a macro-layer backlog
+item (**S**, three wrapper macros), not a UI failure, and the panel renders them **disabled with the
+reason** rather than omitting them — because an omission reads as *"not possible on this machine"*,
+which is a different and wrong claim. The chip stays in its place and lights up the day the macro
+lands.
+
+**Single-occupancy is the frequent, concrete instance of disabled-with-a-reason** — and it comes with
+its own honesty problem. The guard's refusals are exact and reusable:
+
+- `T{n} already staged in the shared path (~{mm}mm)` — `ace_preload_guard.py:868`
+- `T{n} is loaded; feeding T{m} would collide at the hub` — `:871`
+- `BYPASS is loaded - hand-fed filament occupies the toolhead. Unload it before feeding a lane` — `:851`
+
+**But no live field says which lane is at the hub.** `_responsible_lane()` is private and unpublished;
+`get_status` exposes only `{enabled, commands_guarded, trips, refusals, staged, path_busy}`. The
+guard's own comment (`:547`): *"The hub sensor says SOMETHING is there, never which lane — that is the
+one thing four lanes merging into one tube destroys. Attribution is therefore by elimination... and it
+gives up rather than guessing."*
+
+So the panel attributes by the same elimination (`ace.current_index` → `ace_preload_guard.staged` →
+`ace_lane_pos`) and, **when it cannot attribute, says so**: `the shared path is occupied — which lane
+cannot be determined`. It never names a lane it inferred. **Work item: publish `_responsible_lane()`**
+(XS) and the reason string gets a name in every case.
+
+### 9.4 Jog — the position, and the survey settled it
 
 `ACE_RAW_FEED` and `FORCE_MOVE STEPPER=extruder` were the two most-typed commands in the sampled
-window, 17 each. The owner has now asked for jog by name, so **the question is no longer whether to
-expose it but how to protect it**, and this document takes a position rather than deferring.
+window, 17 each. The owner has asked for jog by name, so the question is not whether to expose it but
+how to protect it. **The command survey answered it, and the answer is better than the interlock I
+was going to propose.**
 
-**The failure mode is specific.** Filament has been ground on this machine when *the ACE and the
-extruder moved out of step* — not because a jog was too long, and not because there was no
-confirmation dialog. So the protection must target that, and a confirm dialog does not.
+**`ACE_RAW_FEED` is not wrapped by the preload guard at all.** The guard wraps exactly:
 
-**The position: expose jog, protect it by segment ownership.**
+```python
+GUARDED_COMMANDS = ("ACE_FEED", "ACE_SMART_LOAD", "ACE_CHANGE_TOOL")     # refusable
+TRACKED_COMMANDS = ("ACE_RETRACT", "ACE_FULL_UNLOAD", "ACE_SMART_UNLOAD") # bookkeeping only
+```
+
+plus the `T0`–`T3` macros. `ACE_RAW_FEED`, `ACE_RAW_STOP`, `ACE_RAW_CMD`, `ACE_TANDEM_EXTRACT`,
+`ACE_LANE_NORMALIZE`, `ACE_CALIBRATE_PATH` and `FORCE_MOVE` are **not wrapped**: no veto, **and no
+`staged` update.**
+
+That second half is decisive. A jog on `ACE_RAW_FEED` moves filament *and silently desynchronises the
+only estimate the machine has of where the tip is* — so a jog button built on it would corrupt the
+very display §9.2 exists to make honest. Its own header says what it is: *"Raw ACE 2 protocol sender
+for experiments. Diagnostic only. Added 2026-08-28."*
+
+**Decision: the panel's ACE-side jog sends `ACE_FEED` and `ACE_RETRACT`, never `ACE_RAW_FEED`.**
+
+| | |
+|---|---|
+| forward | `ACE_FEED T={i} LENGTH={step} SPEED={speed}` — guarded **and** tracked; `staged` increments |
+| back | `ACE_RETRACT T={i} LENGTH={step} SPEED={speed}` — tracked; `staged` decrements |
+| **never** | `FORCE=1`. That is the documented guard bypass (`ace_preload_guard.py:17`) and the panel has no business sending it. |
+
+So the guard the operator already relies on stays in the loop, the tip display stays true, and the
+refusal comes back as the panel's own disabled-reason on the next render. This is strictly better than
+a confirm dialog, which protects nothing.
+
+The remaining protections:
 
 | protection | rule |
 |---|---|
-| **Mutual exclusion by segment** | The panel derives which actuator owns the tip's current segment and enables **only that one**. ACE-side jog is enabled while the tip is between the ACE edge and the gears; extruder-side jog is enabled only once post-gear is lit. **They are never both enabled**, and the disabled one states why: `the tip is in the ACE's segment — the extruder cannot reach it`. This is the standing segment-ownership rule made into an interlock. |
-| **Bounded step** | A step selector with fixed values — 1 / 5 / 25 / 100 mm. No free numeric entry, so no fat-fingered 1000. |
-| **No latching motion** | A press moves one step. Continuous motion requires press-and-hold, and releasing stops it. Nothing keeps moving after the finger leaves. |
-| **Gated like every other motion control** | `PATH_FREE`, `FRESH`, `NO_OP`, and not `EJECTING`. Jog is motion, and it obeys the same predicates as Load and Eject. |
-| **Never in an unknown segment** | If the tip's segment is *inferred* or *unknown* (§9.2), **both** jog directions are disabled with `the tip's position is not known — audit first`. Jogging blind is exactly how the two actuators get out of step. |
+| **Mutual exclusion by segment** | The panel derives which actuator owns the tip's segment and enables **only that one**. ACE-side jog between the ACE edge and the gears; extruder-side only once post-gear is lit. **Never both**, and the disabled one states why: `the tip is in the ACE's segment — the extruder cannot reach it`. This is the standing segment-ownership rule made into an interlock, and it targets the actual failure mode: the two actuators moving out of step. |
+| **Bounded step** | Fixed values — 1 / 5 / 25 / 100 mm. No free numeric entry. Speed is fixed at a safe constant, not exposed: the firmware rejects ≥ 110 mm/s with `PARAM_ERROR` and the parser would happily accept 120. |
+| **No latching motion** | One press, one step. Continuous requires press-and-hold and stops on release. |
+| **Gated like every other motion control** | `PATH_FREE`, `FRESH`, `NO_OP`, not `EJECTING`. Jog is motion. |
+| **Never in an unknown segment** | If the tip's segment is *inferred* or *unknown* (§9.2), **both directions** are disabled: `the tip's position is not known — audit first`. Jogging blind is how the actuators get out of step. |
 | **A visible stop** | `STOP ALL` is on screen whenever jog is. |
 
-**Flagged for QA — two residual questions this design cannot settle:**
+**Flagged for QA — one question remains, and it is the extruder half.** `FORCE_MOVE` has **no guard
+whatsoever**: no ACE awareness, no temperature check, no path check, and it invalidates kinematics by
+design. There is no tracked equivalent to switch to, the way there was on the ACE side. This design
+offers extruder-side jog **only when `toolhead_postgear` is lit and the ACE side is consequently
+disabled**, and asks QA whether that is sufficient or whether the extruder half should be routed
+through a new guarded macro before it appears on a card. **The synchronised case — feeding through
+the gears, where both actuators must move together — is deliberately not offered at all.** If that gap
+matters in practice the answer is a macro that owns the synchronisation, not two buttons and a steady
+hand.
 
-1. **Does `ACE_RAW_FEED` bypass the preload guard?** If the raw commands are deliberately outside
-   `ace_preload_guard`'s command wrapping, then the panel's own predicates are the *only* guard on a
-   jog button, and a UI bug becomes a mechanical one. Whether that is acceptable, or whether jog
-   should be routed through a new guarded macro instead, is a QA call.
-2. **The one case where both actuators must move together** — feeding through the gears — is
-   deliberately **not offered** by this design. There is no synchronised jog control. If that gap
-   turns out to matter in practice, the answer is a purpose-built macro that owns the
-   synchronisation, not two buttons and a steady hand.
+### 9.5 RFID — one control exists, and the other does not
 
-### 9.5 RFID
+**`Re-read tag`, per lane** — `ACE_SCAN_TAG T={i}` (`ace_rfid_scan.py:37`); the all-lanes form
+`ACE_SCAN_TAGS` sits in the header. Disabled when the slot reads empty, reason
+`T{i} is empty — nothing to read`; the all-lanes form carries the driver's own
+`every lane reads empty — nothing to scan`.
 
-Two controls, per the request:
+**And the label must not say "scan", because it does not scan.** `ace_preload_guard.py:492`:
 
-- **`Find` (scan)** — `ACE_SCAN_TAGS`, already registered and working; it is in the `ACE_LANES`
-  footer today and nowhere else. It is a whole-unit operation, not per-lane, so it lives in the
-  header rather than in a tile. **It publishes no status object**, so the panel cannot show progress:
-  it shows an in-flight state for a fixed interval, then re-reads the slots. That limitation is
-  stated in the UI (`scanning… results appear in the lanes`), not hidden.
-- **`Write`** — per-lane, and only where a tag is present (`ace_instance_0.slots[i].rfid`). A write
-  changes physical media and is irreversible in the way a config edit is not, so it keeps a confirm
-  step naming what will be written to which spool. **This is friction being added deliberately, and
-  it is the one place in this document where that happens.**
+> *"ACE_SCAN_TAG is a FETCH, not a scan: it retrieves whatever the ACE has already decoded and cannot
+> make it read anything. The read itself is firmware-side and happens whenever the spool ROTATES past
+> the fixed antenna in the slot bay — at least one revolution, ~600 mm on a full spool."*
 
-Both sit behind a `tag ▾` split control in the tile so they cost one row, not two.
+A button labelled `Scan` that silently returns nothing because the spool has not turned is precisely a
+control that lies about what it did. So: **`Re-read tag`**, with the meta line *"fetches what the ACE
+has already decoded — the ACE only reads while the spool turns"*. It also publishes **no status
+object**, so the panel cannot show progress: it shows an in-flight state for a fixed interval, then
+re-reads the slots, and says so.
+
+**`Write tag` cannot be built. There is no write path in this firmware.** The ACE2 command catalog
+contains exactly four RFID opcodes and every one is a read or reader-configuration:
+`GET_FILAMENT_INFO` (13), `SET_RFID_ENABLE` (14), `FILAMENT_IDENTIFY` (68), `RFID_TEST` (69). There is
+no `SET_FILAMENT_INFO` and no write opcode anywhere in `~/ACEPRO/` or `~/klipper/klippy/extras/`.
+
+Per the rule in §9.3, the control is **present and disabled with the reason**, not omitted:
+`this firmware has no tag-write command`. That is an honest answer to a request, and it is also a
+protocol-research question rather than a UI one — it belongs in
+[`03-rfid-and-tags.md`](03-rfid-and-tags.md), not in a backlog of buttons.
+
+What the panel *can* offer instead, and does: **`Assign spool…`** writes the same facts to
+`mmu.gate_*` via `MMU_GATE_MAP`, which is what the tag would have supplied. `slots[i].rfid` is a
+**boolean** — "this slot has a readable tag" — not a payload, and the decoded fields it gates
+(`sku, brand, rgba, extruder_temp, hotbed_temp, diameter, total, current`) are already in
+`slots[i]`, so the tile shows them and marks them `from tag`.
 
 ### 9.6 Hand-fed gates 4–5 — what must be absent
 
