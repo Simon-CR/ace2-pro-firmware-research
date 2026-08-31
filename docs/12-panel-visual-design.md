@@ -1519,33 +1519,52 @@ buttons, to one decisive line and a safe row above a destructive row.** And `Loa
 
 ## 7. Sized and sequenced
 
-Ordered so the panel becomes **clickable** before it becomes handsome. The earlier ordering put the
-visual language third and the buttons fourth; that was written before the owner said the panel is
-"passive, so little value add to open it". Controls now lead, and the styling arrives with them
-rather than ahead of them.
+Ordered so the panel becomes **clickable** before it becomes handsome, and so the card carries the
+floor before the page carries the depth. The earlier ordering put the visual language third; that was
+written before the owner called the panel *"passive, so little value add to open it"*. Controls lead.
+
+### 7.1 The panel
 
 | # | Slice | Size | What he sees after it |
 |---|---|---|---|
-| **0** | Change the ACE Panel webcam entry's `aspect_ratio` from `4:3` to `3:2`, and add the `.theme/navi.json` sidebar entry (§5.0, §5.3) | **XS** | The dashboard card it is **already registered as** gets a shape that fits four lane tiles side by side, plus a sidebar route to the full-width view. Two settings changes, no code. |
-| **1** | **The action rail** (§2.12) bolted onto the *existing* panel, with the command manifest and the §4.3 predicates | **S–M** | **The first thing he can click.** Every message that says "run `MMU_RECOVER GATE=2`" becomes that button, with the sentence beside it. This lands before any restyling and it is the whole point of the panel. |
-| **2** | Lane controls: Load / Park / Retract / Eject / Eject (force) per lane, plus the recovery bar (`Audit`, `Recover`, `Clear op`, `Unlock`, `Reconcile`, `Clear suppression`) — with verbatim disabled reasons | **L** | **The console stops being necessary for the common path.** Every disabled control says why. `_ACE_SUPPRESSION_DISARM` stops being invisible. |
-| **3** | `ACE_STOP_ALL` (§4.5) + the `ACE_LANES` rewrite (§6.3), including the `.steps` crash that stops the dialog rendering during an eject | **S** | One control that stops everything, on both surfaces. The touchscreen dialog gains a Load button and one decisive line, and it appears during an eject instead of crashing. |
-| **4** | Truth pass: read `ace_staged_mm`; delete `laneState()`'s "in ACE, not fed"; fix the shared-run owner; draw entry=0/post=1 as a fault; render `enabled:false` as `sensor off`; drop `lane_empty` | **S** | The panel stops contradicting itself about lane 2, and the controls above stop being gated on a lie. |
-| **5** | The visual language: tokens, type, spacing, theme toggle, header + dryer strip, lane tiles as objects, hand-fed strip, the redrawn path diagram **as a lane selector** | **M** | **The panel looks like the mockup** — arriving on a surface that already does things. This is the "something nice done" slice, and it is fifth on purpose. |
-| **6** | Dryer and dry-roll controls; the dryer prose is deleted, not moved | **S** | Drying starts and stops from the panel, in one 44 px strip instead of a quarter of the page. |
-| **7** | Patcher hardening: distinct return values, non-zero exit, `status.json`, corrected docstring — plus the panel's health pill (§5.3) | **XS** | A red pill when a Mainsail update breaks the nozzle dot, instead of fifteen silent minutes. |
-| **8** | Spool picker → `MMU_GATE_MAP` (§2.9) | **M** | Assigning a spool is a list with swatches and weights, not a command line named in four error messages. |
-| **9** | KlipperScreen sufficiency pass: the §3.3 screen — either by fixing `acepro.py` (the `TR` command that does not exist, the dead `ace_pro_control` lock) or by building it fresh | **M** | **The machine gains a control panel at all.** Scoped to completeness, not richness. |
-| **10** | `manifest.webmanifest` + icon in `/ace/` (§5.4) | **XS** | An ACE icon on the phone home screen that opens standalone. |
-| **11** | Stub-or-hide pass on the 13 unimplemented `MMU_*` commands the Mainsail card sends (chapter 11 §2.9) | **M** | The Happy-Hare card stops offering buttons that error, and stops offering one that fails silently. |
+| **0** | Settings only: set the ACE Panel webcam's `aspect_ratio` to `3:2`, pin the **dashboard** card to `ACE Panel` and the `/cam` page to the Arducam, add the `.theme/navi.json` entry (§5.0, §5.3) | **XS** | The card he already has gets a shape that fits four lanes side by side, plus a sidebar route to the full page. **No code.** |
+| **1** | **The action rail** (§2.12) bolted onto the existing panel: the command manifest, argument lifting, and the §4.3 predicates | **S–M** | **The first thing he can click.** Every message that says *"run `MMU_RECOVER GATE=2`"* becomes that button with the sentence beside it. Lands before any restyling. |
+| **2** | Truth pass: read `ace_staged_mm`; delete `laneState()`'s "in ACE, not fed"; fix the shared-run owner; draw entry=0/post=1 as a fault; render `enabled:false` as `sensor off`; drop `lane_empty` | **S** | The panel stops contradicting itself about lane 2 — and the controls in slice 3 stop being gated on a lie. |
+| **3** | **Card lane controls + recovery bar**: Load / Park / Retract / Eject / Eject (force), `Audit`, `Recover`, `Clear op`, `Unlock`, `Reconcile`, `Clear suppression`, and the fault / jam / orphan / open-intent banners — all with §4.3's predicates and verbatim reasons | **L** | **The floor.** Every fault has a way out on the card, and the console stops being necessary for the common path. `_ACE_SUPPRESSION_DISARM` stops being invisible. |
+| **4** | `ACE_STOP_ALL` (§4.5) + the `ACE_LANES` rewrite (§6.3), including the `.steps` crash that stops the dialog rendering during an eject | **S** | One control that stops everything, on both surfaces. The touchscreen dialog gains a Load button and one decisive line. |
+| **5** | **The tip ladder** with the four confidence tiers (§9.2) | **M** | *"Show me clearly where the tips are in each lane"* — answered, and answered honestly: a dot only where a sensor pins it, a band where it does not. |
+| **6** | The visual language: tokens, type, spacing, theme, header, lane tiles as objects, hand-fed strip | **M** | **The panel looks like the mockup.** Fifth-and-a-half on purpose: it arrives on a surface that already does things. |
+| **7** | **Dryer control region** (§10): mode, target, progress, preset chips, start/stop, the fault banner, the runtime-vs-persisted warning | **S** | Drying starts and stops from the dashboard, in one 44 px strip instead of a quarter of the page saying nothing. |
+| **8** | **The page** (§11.6): lane detail with all six destination chips, jog with the segment interlock, RFID, the derivation view, the live truth table, operation history, diagnostics | **L** | *"Instead of having to use macros from Klipper"* — completed. The page earns its trip by showing its working. |
+| **9** | nginx alias for `/ace/` (§5.3.1) + patcher hardening + the panel's health pill | **XS** | The cron copy and its silent failure mode are deleted rather than mitigated; a red pill appears when a Mainsail update breaks the nozzle dot. |
+| **10** | Spool picker → `MMU_GATE_MAP` (§2.9) | **M** | Assigning a spool is a list with swatches and weights, not a command named in four error messages. |
+| **11** | **KlipperScreen sufficiency pass** (§3.3): either fix `acepro.py` (the `TR` command that does not exist, the dead `ace_pro_control` lock) or build the layout fresh | **M** | The machine gains a control panel at all. Scoped to completeness, not richness. |
+| **12** | `manifest.webmanifest` + icon in `/ace/` | **XS** | An ACE icon on the phone home screen that opens standalone. |
+| **13** | Stub-or-hide the 13 unimplemented `MMU_*` commands the Mainsail card sends (chapter 11 §2.9) | **M** | The Happy-Hare card stops offering buttons that error, and one that fails silently. |
 
-Slices 0–1 are a single session, and slice 1 alone changes the panel's reason to exist. Slice 5 is
-the one that answers "I really insist on having something nice done" — deliberately after the panel
-has something to be nice *about*.
+Slices 0–1 are a single session, and slice 1 alone changes the panel's reason to exist. Slice 3 is
+the floor. Slice 6 is the one that answers *"I really insist on having something nice done"* —
+deliberately after the panel has something to be nice *about*.
+
+### 7.2 The macro and driver backlog this design exposed
+
+None of these is UI work, and the panel is honest without them — but each one converts a
+disabled-with-a-reason into a working control, or a reckoned number into a measured one.
+
+| Item | Size | Why it matters |
+|---|---|---|
+| **Publish `GET_FEED_INFO` (cmd 76)** per slot: `{motor_counts, magnitude_mm, moved_mm}` | **S** | The ACE measures its own feed — a 723 mm retract reported 733 mm delivered — and **nothing polls it**. This turns the ACE → hub run from dead reckoning into measurement, which is **the single largest available improvement to the display the owner asked for**. |
+| **Publish `_responsible_lane()`** from `ace_preload_guard.get_status` | **XS** | Every *"the shared path is busy"* reason could name the lane instead of admitting it cannot. |
+| **Three destination wrapper macros**: park-at-gate-still-gripped, park-on-hub, feed-to-entry | **S** | Lights up the three destination chips that are disabled today (§9.3). |
+| **A guarded extruder-jog macro** | **S** | `FORCE_MOVE` has no guard of any kind. Resolves the one jog question still flagged to QA (§9.4). |
+| **A synchronised jog** for the gears segment | **M** | The one case where both actuators must move together, deliberately not offered as two buttons. |
+| Publish the uncollapsed per-gate position (chapter 11 §2.1) | **S** | Largely obviated for the panel by `ace_staged_mm`, but `ACE_LANES` and the other dialogs still read the collapsed value. |
+| Fix `ace_ui.cfg:48` / `ace_unload.cfg:110` — the `.steps` variable `ACE_LANE_EJECT` no longer declares | **XS** | Folded into slice 4. It stops `ACE_LANES` rendering during an eject, which is when its Abort button is the point. |
 
 ---
 
-**Ends.** The rendered proof is at [`examples/ace-panel-mockup/index.html`](../examples/ace-panel-mockup/).
+Sections 9-11 extend this list with the required control set, the dryer region and the two-surface
+split; the slice table above already accounts for all three.
 
 ---
 
@@ -2091,3 +2110,9 @@ The §3.1 layout, plus three things that exist only here:
 | **Diagnostics & maintenance** | audit output in full, preload-guard status, buffer state, calibration, normalize, cleanup, bypass |
 
 ---
+
+---
+
+**Ends.** The rendered proof is at [`examples/ace-panel-mockup/index.html`](../examples/ace-panel-mockup/)
+- four artboards, eleven states, a theme toggle, and two executable checks that hold the acceptance
+criteria: `node acceptance.js` (1702 checks) and `node render-check.js` (44 artboards).
