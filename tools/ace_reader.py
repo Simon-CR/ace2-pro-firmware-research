@@ -1,7 +1,16 @@
 """Host driver over the v2 passthrough: staged frames through the firmware's own transceive.
 
 ops: 0 read reg | 1 write reg | 2 store TX byte | 3 transceive | 4 read RX byte | 5 rx bit length
+     6 SELECT | 7 bulk page read | 8 clear cached tag record
 Staging buffer 0x20000704: +0 TX(64) | +64 RX(64) | +128 rx bit length.
+
+Whole-tag dumps go through per-page 0x30 transceives, not op 7: op 7 writes pages 4-39 at BUF+0
+while op 4 reads BUF+64 with a 6-bit offset, so only pages 20-35 come back out. Its 0x90 return
+is the byte count (144), not a status code. See docs/01-firmware-patches.md.
+
+NTAG WRITE (0xA2), from decay71: clear RxCRCEn for the write frame, do not wait on the 4-bit ACK
+(it arrives after the receive window closes), and re-SELECT with op 6 before the verify read or
+you get a different page. See docs/04-tag-operations.md.
 """
 import json
 import time

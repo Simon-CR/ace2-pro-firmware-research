@@ -101,12 +101,16 @@ spool's identity. Note it clears the *firmware's* record; the Klipper driver kee
 ```gcode
 ; op 6 SELECT, reader 1  ->  0x81060000
 ACE_RAW_CMD T=0 CMD=FILAMENT_IDENTIFY INDEX=2164654080
-; op 7 bulk page read    ->  0x81070000   (returns 144 on success)
+; op 7 bulk page read    ->  0x81070000   (returns 144 = 0x90 on success)
 ACE_RAW_CMD T=0 CMD=FILAMENT_IDENTIFY INDEX=2164719616
 ```
 
-Reading the 144 bytes back out is done a byte at a time (op 4), which is why the Python tooling
-exists — see `tools/ace_reader.py`.
+**`op 7` cannot give you the whole tag.** It really does read pages 4–39 — `144` is the byte
+count, not a status code — but it writes them at `BUF+0` while `op 4` reads at `BUF+64` with a
+6-bit offset, so only **pages 20–35** can be read back out. To dump a tag, issue per-page `0x30`
+transceives and read each 16-byte reply with `op 4`; that is what `tools/ace_reader.py` does and
+how `data/anycubic_ntag_dump.json` was produced. Details and the fix in
+[docs/01-firmware-patches.md](../docs/01-firmware-patches.md).
 
 ## Rotate a lane to bring its tag into the antenna
 

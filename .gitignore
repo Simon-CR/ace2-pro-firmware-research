@@ -4,3 +4,4 @@
 *.elf
 *.o
 __pycache__/
+.*-draft.md

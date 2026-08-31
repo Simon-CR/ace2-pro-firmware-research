@@ -70,13 +70,20 @@ Then send frames **without** appending CRC bytes — the reader adds and checks 
 manual CRC with CRC enabled produces a malformed frame and total silence, which is very easy to
 misread as "the card is not there".
 
+One exception: **`RxCRCEn` must be cleared for an NTAG `WRITE`**, whose reply is a CRC-less 4-bit
+ACK. See "The NTAG WRITE path, in detail" below.
+
 ## Reading an NTAG (Anycubic-format, OpenSpool, blank)
 
-```
-park tag -> op 6 SELECT -> op 7 bulk page read     (144 bytes = pages 4..39)
-```
+**Read it a page at a time.** Park the tag, `op 6` SELECT, then for each page stage `0x30 | page`
+and transceive with command `0x0C`. Each `READ` returns 16 bytes (four pages) into the RX region,
+so nine transceives cover pages 4–39. This is how `data/anycubic_ntag_dump.json` was taken.
 
-or, for individual pages, stage `0x30 | page` and transceive with command `0x0C`.
+`op 7` (bulk page read) **is not a shortcut for this.** It does work — it returns `144` (`0x90`),
+which is the real byte count for pages 4–39 — but it writes into `BUF+0` while `op 4` reads at
+`BUF+64` with a 6-bit offset, so only dump bytes 64–127 (**pages 20–35**) can be read back out.
+The pages that carry the sku, brand and material are exactly the ones you cannot reach. See
+[01-firmware-patches.md](01-firmware-patches.md) for the mechanism and the one-instruction fix.
 
 ## Reading a Bambu tag
 
@@ -98,7 +105,9 @@ downstream will work and there is no point reading further.
 
 ## Writing a tag
 
-**NTAG** — single-phase: stage `0xA2 | page | b0 b1 b2 b3`, transceive `0x0C`.
+**NTAG** — single-phase: stage `0xA2 | page | b0 b1 b2 b3`, transceive `0x0C`. Three non-obvious
+rules apply — clear `RxCRCEn`, ignore the ACK, re-SELECT before verifying. They are in "The NTAG
+WRITE path, in detail" below, and skipping any of them produces a *silently* wrong result.
 
 **MIFARE Classic** — two-phase: stage `0xA0 | block`, transceive, expect ACK `0x0A`; then stage
 the 16 data bytes, transceive, expect ACK. (On Bambu tags this always NAKs with `0x04` — they are
@@ -115,6 +124,58 @@ Safety, in order of how badly you will regret ignoring it:
 4. **Verify with a changed value.** Writing identical bytes and reading them back proves nothing —
    we initially "proved" our write path that way and had to retract it. Write something different
    to a known-empty location, confirm it, then restore.
+
+## The NTAG WRITE path, in detail
+
+These four rules come from **decay71** (author of *multiACE*), who
+drove the write path harder than we did, on our RC522 passthrough patch. Reported in the
+[ACE 2 Pro gist thread](https://gist.github.com/hakimio/4916ff69add458fdc51aeea76f21efb9).
+
+### 1. Disable RX CRC for the WRITE transceive
+
+Rule 2 above says "CRC on", and for `READ` that is right. For `WRITE` it is not: the tag answers
+`0xA2` with a **4-bit ACK**, which carries no CRC, so the reader raises a protocol error and
+discards the reply. Clear `RxCRCEn` (`RxModeReg 0x13`, bit 7) for the write frame. **Leave
+`TxCRCEn` set** — the `0xA2` frame itself still needs its CRC_A appended by the reader. Restore
+`RxCRCEn` before the next read.
+
+### 2. The WRITE ACK does not come back through the tunnel — verify by read-back instead
+
+The tag only emits the ACK after roughly **4 ms** of internal programming, which outlasts the
+transceive's receive window. So through the passthrough you see `op 5` report `bits = 0x00` and
+`op 4` return a **stale byte left over from the previous frame** — not a NAK, not an error, just
+nothing.
+
+**The write still succeeds.** decay71 confirmed this by read-back, and it matches our own
+`DEADBEEF` result, where the helper returned `238` and the write had nonetheless taken effect.
+
+Practical rule: **never treat the ACK as your success signal — it is not observable.** Verify
+every page, or every 4-page chunk, by reading it back. Anything that branches on the ACK byte is
+branching on garbage.
+
+### 3. A WRITE leaves the tag's read pointer shifted — re-SELECT before verifying
+
+A verify-read of **page 4** issued immediately after a write returned **page 19's** bytes.
+Deterministically, reproduced twice. An `op 6` SELECT between the write and the verify read resets
+it.
+
+So the verify sequence is `WRITE → op 6 SELECT → READ`, not `WRITE → READ`. Skipping the re-SELECT
+does not fail loudly; it silently hands you a different page's contents, which will read as a
+successful verify of the wrong data if you are comparing against a buffer rather than against the
+page you meant to write.
+
+### 4. `op 7` (bulk page read) cannot return its payload
+
+Independently reproduced by decay71: `op 7` returns a constant `0x90` for every `arg1`/`arg2`
+combination, with `sku`, `tag` and the unparsed fields all empty, and no way to pull a page back.
+
+That is expected, and `0x90` is not a failure — it is `144`, the byte count for pages 4–39, i.e.
+the documented success value. The payload lands in device RAM at `0x20000704` and never crosses
+the protobuf boundary; the passthrough returns one byte per call in `code` and touches no other
+response field. `op 4`'s 6-bit offset then keeps all but pages 20–35 out of reach. Staying on
+per-page `op 4` reads, as decay71 did, is the correct call until the patch is rebuilt with a
+wider staging-buffer read op. Mechanism and fix in
+[01-firmware-patches.md](01-firmware-patches.md).
 
 ## Designing a write macro
 

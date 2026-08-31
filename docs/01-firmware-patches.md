@@ -56,14 +56,46 @@ bits  7..0       arg2 (value / RC522 command byte)
 | 1 | write `arg2` to register `arg1` | 0 |
 | 2 | stage `arg2` into the frame buffer at `arg1` | 0 |
 | 3 | transceive: RC522 command `arg2`, `arg1` bytes from the buffer | helper status |
-| 4 | read RX buffer byte at `arg1` | byte |
+| 4 | read RX buffer byte at `arg1` (`arg1` is 6 bits, so `BUF+64 .. BUF+127` only) | byte |
 | 5 | read received bit length | byte |
 | 6 | **SELECT a card** (powers the reader, then `sub_800DEB6`) | 0 = ok |
-| 7 | **bulk page read** pages 4–39 (`sub_800E18C`) | byte count (144 = ok) |
+| 7 | **bulk page read** pages 4–39 (`sub_800E18C`) — `arg1`/`arg2` ignored | byte count (`144`/`0x90` = ok) |
 | 8 | clear the cached tag record for slot `arg1` | 0 |
 
 Frame buffer is the firmware's own tag-page buffer at `0x20000704`
 (`+0` TX, `+64` RX, `+128` received bit length), which is idle while background scanning is off.
+
+Every op returns a **single byte in the response's `code` field**. Nothing the passthrough does
+ever populates `sku`, `type`/`tag` or any other response field — only the *UID passthrough* patch
+writes `sku`, and that is the normal identify path, not this one.
+
+#### op 7's readback window is too narrow — a known defect
+
+`op 7` works: it calls `sub_800E18C(ctx, 0x20000704)`, which issues nine 16-byte `READ 0x30`
+frames and returns the accumulated byte count. **`0x90` (144) is the success value**, not a status
+code or an echo — 36 pages × 4 bytes. It takes no arguments; the disassembly has no `ubfx` on the
+op-7 path, so `arg1`/`arg2` are dead and the return is constant across every argument you try.
+
+The defect is on the way back out. `op 7` writes its 144 bytes at `BUF+0`, but `op 4` reads at
+`BUF+64+arg1` with `arg1` masked to **6 bits**. So `op 4` can only address dump bytes 64…127 —
+**pages 20…35**. Pages 4…19 (magic, version, sku, brand, material) and 36…39 are unreachable, and
+those are the pages anyone actually wants. Consequence: `op 7` is not usable as a whole-tag dump,
+and per-page `0x30` transceives plus `op 4` remain the only complete read path. Our own tag dump
+in `data/anycubic_ntag_dump.json` was taken that way, not with `op 7`.
+
+Two further side effects of the 144-byte write at `BUF+0`:
+
+- it **destroys anything staged in the TX region** (`BUF+0..63`), so re-stage after every `op 7`;
+- it **overwrites the bit-length byte at `BUF+128`**, so an `op 5` after an `op 7` returns page 36
+  byte 0, not a bit count.
+
+You can confirm `op 7` really transferred data without changing the firmware: after `op 6` then
+`op 7`, `op 4` with `arg1 = 0..3` returns **page 20**. On an Anycubic-format tag that is the ABGR
+colour word (`ff 59 d9 f7` on ours), which is unmistakable.
+
+**The fix, if this patch is rebuilt:** the packed request word has bits 15..14 free, so widening
+the offset argument is one instruction. Add an op 9 that reads `BUF + ubfx(r5, 8, 8)` — an
+absolute 0…255 staging-buffer offset — rather than changing `op 4` and breaking `op 3` callers.
 
 **Why we wanted it (use case).** Reading a Bambu tag needs MIFARE authentication, and writing any
 tag needs arbitrary frames — neither exists in the firmware and neither is worth reimplementing

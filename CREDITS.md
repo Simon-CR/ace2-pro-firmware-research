@@ -47,6 +47,30 @@ rejected for their *size*. The actual answer — an 8-byte magic trailer checked
 was found by reading the IAP section of his analysis and following it into the disassembly. The
 map was already drawn; we were just slow to read it.
 
+## decay71 — the NTAG WRITE path
+
+**decay71**, author of **multiACE**, took the RC522 passthrough patch
+and drove the *write* side of it further than we had, then reported back in the
+[gist thread](https://gist.github.com/hakimio/4916ff69add458fdc51aeea76f21efb9). Three of the four
+things he found we did not know, and two of them fail *silently* — our own write documentation was
+incomplete in a way that would have cost the next person hours:
+
+- **`RxCRCEn` must be cleared for the `0xA2` WRITE transceive.** The tag's ACK is 4 bits and
+  carries no CRC, so with RX CRC on the reader flags a protocol error and drops the reply. TX CRC
+  stays enabled. We had documented "CRC on" as a flat rule.
+- **The WRITE ACK is not observable through the tunnel at all.** The tag emits it only after
+  ~4 ms of programming, past the transceive's receive window; `op 5` reports `bits = 0x00` and
+  `op 4` hands back a stale buffer byte. **The write still succeeds** — he verified by read-back.
+  This explains, properly, the meaningless `238` return we recorded for our own `DEADBEEF` write
+  and had merely noted as "not a status code".
+- **A WRITE leaves the tag's read pointer shifted.** A verify-read of page 4 straight after a
+  write returned *page 19's* bytes, deterministically, twice; an `op 6` re-SELECT resets it. We
+  had never verified a write without an intervening select, so we never saw this — and it is the
+  kind of bug that reads as a successful verify of the wrong data.
+- He also **independently reproduced the `op 7` bulk-read dead end**, which is what made us go
+  back to the disassembly and find that `op 4`'s 6-bit offset puts most of `op 7`'s output out of
+  reach. That is our bug, in our patch, and his report is why it is now documented.
+
 ## Bambu-Research-Group — RFID-Tag-Guide
 
 <https://github.com/Bambu-Research-Group/RFID-Tag-Guide>

@@ -15,7 +15,11 @@
 @   op 4  read RX buffer byte at arg1             -> byte
 @   op 5  read received bit length                -> byte
 @   op 6  SELECT a card (sub_800DEB6)             -> status (0 = ok); UID lands at BUF+13..19
-@   op 7  bulk page read 4..39 (sub_800E18C)      -> byte count (>=140 on success), data at BUF
+@   op 7  bulk page read 4..39 (sub_800E18C)      -> byte count (144 = 0x90 on success), data at BUF
+@         KNOWN DEFECT: takes no args, and writes 144 bytes at BUF+0 while op 4 reads BUF+64 with a
+@         6-bit offset -- so only dump bytes 64..127 (pages 20..35) can be read back, and the write
+@         clobbers the staged TX frame and the bit-length byte at BUF+128. Bits 15..14 of the packed
+@         word are free: a future op 9 reading BUF + ubfx(r5,8,8) would expose the whole buffer.
 @   op 8  clear the cached tag record for slot arg1 -> 0
 @
 @ Staging buffer 0x20000704 (the firmware's own tag-page buffer; idle while background
