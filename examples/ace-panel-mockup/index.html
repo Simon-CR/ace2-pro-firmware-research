@@ -8,232 +8,152 @@
 /* ============================================================================
    ACE 2 Pro panel — visual design mockup
    Specification: docs/12-panel-visual-design.md
-   Single file, no build step, no CDN. Runs from file://
+   Single file, no build step, no CDN, runs from file://
+   Four artboards: dashboard card, full page, phone, KlipperScreen 800x480.
    ==========================================================================*/
-
-/* --- 1.2 Colour tokens. Dark on bare :root; light redefines the same 17 names. */
 :root{
   --bg:#0E1116; --surface-1:#151A21; --surface-2:#1C222B; --surface-3:#242C37;
   --divider:#2A333F; --border:#677689; --focus:#5EC8D8;
   --text:#E7ECF3; --text-dim:#A6B2C4; --text-faint:#8B93A1;
   --ok:#4ED88F; --staged:#F5B942; --busy:#7FA9F5; --fault:#FF6B6B;
   --unknown:#98A3B5; --destructive:#FF6B6B; --accent:#5EC8D8;
-  --swatch-inner:rgba(0,0,0,.38);
-  --card-shadow:none;
-
+  --swatch-inner:rgba(0,0,0,.38); --card-shadow:none; --track:#242C37;
   --font-ui:ui-sans-serif,-apple-system,"Segoe UI Variable Text","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
   --font-num:ui-monospace,"SF Mono","Cascadia Mono","JetBrains Mono","DejaVu Sans Mono",Consolas,monospace;
-
-  --sp-1:2px; --sp-2:4px; --sp-3:6px; --sp-4:8px; --sp-5:12px;
-  --sp-6:16px; --sp-7:20px; --sp-8:24px; --sp-9:32px; --sp-10:40px;
-  --r-chip:6px; --r-ctl:10px; --r-card:14px; --r-pill:999px;
+  --sp-1:2px;--sp-2:4px;--sp-3:6px;--sp-4:8px;--sp-5:12px;--sp-6:16px;--sp-7:20px;--sp-8:24px;--sp-9:32px;
+  --r-chip:6px;--r-ctl:10px;--r-card:14px;--r-pill:999px;
 }
-@media (prefers-color-scheme: light){
-  :root:not([data-theme="dark"]){
-    --bg:#EEF1F6; --surface-1:#FFFFFF; --surface-2:#F4F7FB; --surface-3:#E7ECF3;
-    --divider:#D3DBE6; --border:#7B899B; --focus:#0B6E7C;
-    --text:#141A22; --text-dim:#4C5A6C; --text-faint:#616B79;
-    --ok:#0E7A4A; --staged:#8A5600; --busy:#2B5FC9; --fault:#B92626;
-    --unknown:#5E6B7D; --destructive:#B92626; --accent:#0B6E7C;
-    --swatch-inner:rgba(255,255,255,.55);
-    --card-shadow:0 1px 2px rgba(20,26,34,.05), 0 6px 18px rgba(20,26,34,.05);
-  }
-}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){
+  --bg:#EEF1F6;--surface-1:#FFFFFF;--surface-2:#F4F7FB;--surface-3:#E7ECF3;
+  --divider:#D3DBE6;--border:#7B899B;--focus:#0B6E7C;
+  --text:#141A22;--text-dim:#4C5A6C;--text-faint:#616B79;
+  --ok:#0E7A4A;--staged:#8A5600;--busy:#2B5FC9;--fault:#B92626;
+  --unknown:#5E6B7D;--destructive:#B92626;--accent:#0B6E7C;
+  --swatch-inner:rgba(255,255,255,.55);--track:#DDE4EE;
+  --card-shadow:0 1px 2px rgba(20,26,34,.05),0 6px 18px rgba(20,26,34,.05);
+}}
 :root[data-theme="light"]{
-  --bg:#EEF1F6; --surface-1:#FFFFFF; --surface-2:#F4F7FB; --surface-3:#E7ECF3;
-  --divider:#D3DBE6; --border:#7B899B; --focus:#0B6E7C;
-  --text:#141A22; --text-dim:#4C5A6C; --text-faint:#616B79;
-  --ok:#0E7A4A; --staged:#8A5600; --busy:#2B5FC9; --fault:#B92626;
-  --unknown:#5E6B7D; --destructive:#B92626; --accent:#0B6E7C;
-  --swatch-inner:rgba(255,255,255,.55);
-  --card-shadow:0 1px 2px rgba(20,26,34,.05), 0 6px 18px rgba(20,26,34,.05);
+  --bg:#EEF1F6;--surface-1:#FFFFFF;--surface-2:#F4F7FB;--surface-3:#E7ECF3;
+  --divider:#D3DBE6;--border:#7B899B;--focus:#0B6E7C;
+  --text:#141A22;--text-dim:#4C5A6C;--text-faint:#616B79;
+  --ok:#0E7A4A;--staged:#8A5600;--busy:#2B5FC9;--fault:#B92626;
+  --unknown:#5E6B7D;--destructive:#B92626;--accent:#0B6E7C;
+  --swatch-inner:rgba(255,255,255,.55);--track:#DDE4EE;
+  --card-shadow:0 1px 2px rgba(20,26,34,.05),0 6px 18px rgba(20,26,34,.05);
 }
-
 *,*::before,*::after{box-sizing:border-box}
 html{color-scheme:dark light}
-body{
-  margin:0;background:var(--bg);color:var(--text);
-  font:400 14px/20px var(--font-ui);
-  -webkit-font-smoothing:antialiased;
-  transition:background-color .2s ease-out,color .2s ease-out;
-}
+body{margin:0;background:var(--bg);color:var(--text);font:400 14px/20px var(--font-ui);
+  -webkit-font-smoothing:antialiased;transition:background-color .2s ease-out,color .2s ease-out}
 :focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px}
+a{color:var(--accent)}
 
-/* --- 1.4 Type scale ------------------------------------------------------ */
-.t-measure-xl{font:600 30px/32px var(--font-ui);letter-spacing:-.4px;font-variant-numeric:tabular-nums}
-.t-measure{font:600 20px/24px var(--font-ui);letter-spacing:-.2px;font-variant-numeric:tabular-nums}
+.t-xl{font:600 30px/32px var(--font-ui);letter-spacing:-.4px;font-variant-numeric:tabular-nums}
+.t-m{font:600 20px/24px var(--font-ui);letter-spacing:-.2px;font-variant-numeric:tabular-nums}
 .t-title{font:600 17px/22px var(--font-ui);letter-spacing:.2px}
 .t-tile{font:650 15px/20px var(--font-ui)}
-.t-body{font:400 14px/20px var(--font-ui)}
 .t-strong{font:600 14px/20px var(--font-ui)}
 .t-meta{font:400 12.5px/17px var(--font-ui);color:var(--text-dim);font-variant-numeric:tabular-nums}
 .t-reason{font:400 12.5px/17px var(--font-ui);color:var(--text-faint)}
 .t-micro{font:650 10px/12px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-faint)}
 .t-unit{font:500 12px/12px var(--font-ui);color:var(--text-dim)}
-.num{font-variant-numeric:tabular-nums}
 .mono{font-family:var(--font-num);font-variant-numeric:tabular-nums}
 
-/* --- mockup chrome ------------------------------------------------------- */
-.chrome{position:sticky;top:0;z-index:40;background:var(--bg);
-  border-bottom:1px solid var(--divider);padding:var(--sp-5) var(--sp-8)}
-.chrome-in{max-width:1288px;margin:0 auto;display:flex;gap:var(--sp-6);align-items:center;flex-wrap:wrap}
-.chrome h1{font:600 16px/22px var(--font-ui);margin:0;letter-spacing:.2px}
-.chrome .spacer{flex:1}
-.states{display:flex;gap:var(--sp-2);flex-wrap:wrap}
-.seg{appearance:none;background:var(--surface-2);border:1px solid var(--border);
-  color:var(--text-dim);border-radius:var(--r-pill);padding:5px 11px;
-  font:600 12px/14px var(--font-ui);cursor:pointer;transition:background-color .11s ease-out,color .11s ease-out,border-color .11s ease-out}
+.chrome{position:sticky;top:0;z-index:40;background:var(--bg);border-bottom:1px solid var(--divider);padding:var(--sp-5) var(--sp-8)}
+.chrome-in{max-width:1320px;margin:0 auto;display:flex;gap:var(--sp-5);align-items:center;flex-wrap:wrap}
+.chrome h1{font:600 16px/22px var(--font-ui);margin:0}
+.seg{background:var(--surface-2);border:1px solid var(--border);color:var(--text-dim);
+  border-radius:var(--r-pill);padding:5px 11px;font:600 12px/14px var(--font-ui);cursor:pointer;
+  transition:background-color .11s ease-out,color .11s ease-out,border-color .11s ease-out}
 .seg:hover{background:var(--surface-3);color:var(--text)}
 .seg[aria-pressed="true"]{background:var(--surface-3);color:var(--accent);border-color:var(--accent)}
-.page{max-width:1288px;margin:0 auto;padding:var(--sp-8)}
-.board-label{display:flex;align-items:baseline;gap:var(--sp-4);margin:var(--sp-9) 0 var(--sp-5)}
+.page{max-width:1320px;margin:0 auto;padding:var(--sp-8)}
+.board-label{display:flex;align-items:baseline;gap:var(--sp-4);margin:var(--sp-9) 0 var(--sp-5);flex-wrap:wrap}
 .board-label .dims{color:var(--text-faint);font:400 12.5px/17px var(--font-num)}
 .scroller{overflow-x:auto;padding-bottom:var(--sp-4)}
 
-/* --- shared components --------------------------------------------------- */
-.card{background:var(--surface-1);border:1px solid var(--divider);border-radius:var(--r-card);
-  box-shadow:var(--card-shadow)}
-.pill{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 10px;
-  border-radius:var(--r-pill);background:var(--surface-2);border:1px solid var(--border);
-  color:var(--text-dim);font:650 10px/12px var(--font-ui);letter-spacing:.11em;text-transform:uppercase;
-  white-space:nowrap}
-.pill i{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+.card{background:var(--surface-1);border:1px solid var(--divider);border-radius:var(--r-card);box-shadow:var(--card-shadow)}
+.pill{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 9px;border-radius:var(--r-pill);
+  background:var(--surface-2);border:1px solid var(--border);color:var(--text-dim);
+  font:650 10px/12px var(--font-ui);letter-spacing:.1em;text-transform:uppercase;white-space:nowrap}
+.pill i{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none;font-style:normal}
 .pill.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 55%,transparent)}
 .pill.staged{color:var(--staged);border-color:color-mix(in srgb,var(--staged) 55%,transparent)}
-.pill.busy{color:var(--busy);border-color:color-mix(in srgb,var(--busy) 55%,transparent);position:relative;overflow:hidden}
+.pill.busy{color:var(--busy);border-color:color-mix(in srgb,var(--busy) 55%,transparent)}
 .pill.fault{color:var(--fault);border-color:var(--fault)}
 .pill.unknown{color:var(--unknown);border-color:var(--border);border-style:dashed}
-.pill.unknown i{background:none;width:auto;height:auto;font-size:11px;line-height:1}
+.pill.unknown i{background:none;width:auto;height:auto;font-size:11px}
 
-/* buttons */
-.btn{display:flex;flex-direction:column;justify-content:center;align-items:center;
-  min-height:36px;padding:0 var(--sp-5);border-radius:var(--r-ctl);
-  background:var(--surface-2);border:1px solid var(--border);color:var(--text);
-  font:600 13px/16px var(--font-ui);cursor:pointer;text-align:center;
-  position:relative;overflow:hidden;
-  transition:background-color .11s ease-out,border-color .11s ease-out,color .11s ease-out}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:0 var(--sp-5);
+  border-radius:var(--r-ctl);background:var(--surface-2);border:1px solid var(--border);color:var(--text);
+  font:600 13px/16px var(--font-ui);cursor:pointer;text-align:center;position:relative;overflow:hidden;
+  text-decoration:none;transition:background-color .11s ease-out,border-color .11s ease-out,color .11s ease-out}
 .btn:hover{background:var(--surface-3);border-color:color-mix(in srgb,var(--focus) 50%,var(--border))}
-.btn:active{background:var(--surface-2);transform:translateY(1px);transition-duration:.06s}
+.btn:active{transform:translateY(1px);transition-duration:.06s}
 .btn.primary{color:var(--accent);border-color:var(--accent)}
-.btn.primary::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--accent)}
 .btn.destructive{color:var(--destructive);border-color:color-mix(in srgb,var(--destructive) 60%,transparent)}
 .btn.destructive:hover{background:color-mix(in srgb,var(--destructive) 12%,var(--surface-2));border-color:var(--destructive)}
-.btn[aria-disabled="true"]{background:var(--surface-1);border:1px dashed var(--border);
-  color:var(--text-faint);cursor:default;transform:none}
-.btn[aria-disabled="true"]::before{display:none}
+.btn[aria-disabled="true"]{background:var(--surface-1);border:1px dashed var(--border);color:var(--text-faint);cursor:default;transform:none}
 .btn[aria-disabled="true"]:hover{background:var(--surface-1);border-color:var(--border)}
-.btn.inflight{color:var(--busy);border-color:color-mix(in srgb,var(--busy) 60%,transparent);cursor:default}
-.btn.inflight::after{content:"";position:absolute;left:0;bottom:0;height:2px;width:40%;
-  background:var(--busy);animation:sweep 1.6s linear infinite}
-@keyframes sweep{0%{transform:translateX(-100%)}100%{transform:translateX(350%)}}
-.ctl{display:flex;flex-direction:column;gap:var(--sp-2);min-width:0}
-.ctl .t-reason{padding:0 2px}
+.btn.sm{min-height:28px;font-size:12px;padding:0 var(--sp-4)}
+.btn.xs{min-height:26px;font-size:11.5px;padding:0 7px;border-radius:var(--r-chip)}
+.btn.door{min-height:28px;width:34px;padding:0;color:var(--accent);border-color:var(--border)}
+.ctl{display:flex;flex-direction:column;gap:3px;min-width:0}
 
-/* swatch — 1.3: never text on a swatch; ring is the 3:1 boundary */
-.sw{width:20px;height:20px;border-radius:var(--r-chip);flex:none;
-  box-shadow:inset 0 0 0 1px var(--swatch-inner);outline:1px solid var(--border);outline-offset:0}
+.sw{width:18px;height:18px;border-radius:var(--r-chip);flex:none;
+  box-shadow:inset 0 0 0 1px var(--swatch-inner);outline:1px solid var(--border)}
 .sw.absent{background:var(--surface-2);outline-style:dashed}
 
-/* lane tile */
-.tile{position:relative;background:var(--surface-1);border:1px solid var(--divider);
-  border-radius:var(--r-card);padding:var(--sp-5) var(--sp-5) var(--sp-5) var(--sp-6);
-  display:flex;flex-direction:column;box-shadow:var(--card-shadow);overflow:hidden}
-.tile .rule{position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--divider)}
-.tile.loaded .rule{width:4px}
-.tile.fault{border-color:var(--fault)}
-.tile.fault .rule{width:4px;background:var(--fault)}
-.tile.empty{border-style:dashed}
-.tile.unknownstate .rule{background:var(--unknown)}
-.tile-head{display:flex;align-items:center;gap:var(--sp-4);height:22px}
-.tile-head .id{font:650 15px/20px var(--font-ui)}
-.tile-head .grow{flex:1}
-.tile .name{font:650 15px/20px var(--font-ui);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:var(--sp-3)}
-.measure{display:flex;align-items:baseline;gap:6px;margin-top:2px}
-.bar{height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden;margin-top:var(--sp-3);
-  box-shadow:inset 0 0 0 1px var(--divider)}
-.bar>span{display:block;height:100%;border-radius:3px}
-.bar.hatch{background-image:repeating-linear-gradient(45deg,var(--unknown) 0 3px,transparent 3px 7px);
-  background-color:var(--surface-2);opacity:.7}
-.tile-actions{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);margin-top:var(--sp-6)}
-
-/* banners */
 .banner{position:relative;border-radius:var(--r-card);padding:var(--sp-5) var(--sp-6) var(--sp-5) var(--sp-7);
   border:1px solid var(--fault);background:color-mix(in srgb,var(--fault) 10%,var(--surface-1));
-  animation:bannerIn .24s cubic-bezier(.2,.7,.3,1)}
-.banner::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--fault);
-  border-radius:var(--r-card) 0 0 var(--r-card)}
-.banner .h{color:var(--fault)}
-.banner .acts{display:flex;gap:var(--sp-4);margin-top:var(--sp-5);flex-wrap:wrap}
-.banner .acts .ctl{min-width:150px}
-@keyframes bannerIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+  animation:bIn .24s cubic-bezier(.2,.7,.3,1)}
+.banner::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--fault);border-radius:14px 0 0 14px}
+.banner .acts{display:flex;gap:var(--sp-4);margin-top:var(--sp-4);flex-wrap:wrap}
+@keyframes bIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 
-/* sensor rows */
-.srow{display:flex;align-items:center;gap:var(--sp-4);height:32px;border-bottom:1px solid var(--divider)}
-.srow:last-of-type{border-bottom:none}
+.rail{background:var(--surface-2);border:1px solid var(--divider);border-radius:var(--r-card);overflow:hidden}
+.rail-item{display:flex;align-items:center;gap:var(--sp-4);padding:4px 10px 4px 0;position:relative;min-height:36px;
+  border-bottom:1px solid var(--divider)}
+.rail-item:last-child{border-bottom:none}
+.rail-item::before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:3px;background:var(--staged);border-radius:2px}
+.rail-item.err::before{background:var(--fault)}
+.rail-item .msg{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.tile{position:relative;background:var(--surface-1);border:1px solid var(--divider);border-radius:var(--r-card);
+  padding:var(--sp-4) var(--sp-5) var(--sp-4) var(--sp-6);display:flex;flex-direction:column;overflow:hidden}
+.tile .rule{position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--divider)}
+.tile.loaded .rule{width:4px}
+.tile.empty{border-style:dashed}
+.tile.fault{border-color:var(--fault)}
+.tile.fault .rule{width:4px;background:var(--fault)}
+.thead{display:flex;align-items:center;gap:var(--sp-4);min-height:20px}
+.thead .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.srow{display:flex;align-items:center;gap:var(--sp-4);height:30px;border-bottom:1px solid var(--divider)}
+.srow:last-child{border-bottom:none}
 .srow .dot{width:10px;height:10px;border-radius:50%;flex:none;border:2px solid var(--border);position:relative}
 .srow .dot.on{background:var(--ok);border-color:var(--ok)}
 .srow .dot.bad{background:var(--fault);border-color:var(--fault)}
-.srow .dot.off::after{content:"";position:absolute;left:-3px;top:3px;width:14px;height:2px;
-  background:var(--unknown);transform:rotate(-45deg)}
+.srow .dot.off::after{content:"";position:absolute;left:-3px;top:3px;width:14px;height:2px;background:var(--unknown);transform:rotate(-45deg)}
 .srow .lbl{flex:1;font:400 13px/16px var(--font-ui)}
 .srow .val{font:500 12px/16px var(--font-num);color:var(--text-dim)}
 .srow .val.off{color:var(--unknown)}
 
-@media (prefers-reduced-motion: reduce){
-  *,*::before,*::after{animation-duration:1ms!important;transition-duration:1ms!important}
-  .btn.inflight::after{animation:none;width:100%}
-}
+.prog{height:6px;border-radius:3px;background:var(--track);overflow:hidden;box-shadow:inset 0 0 0 1px var(--divider)}
+.prog>span{display:block;height:100%;border-radius:3px}
+.chips{display:flex;gap:5px;flex-wrap:wrap}
 
-/* ===== artboard: desktop =================================================== */
-.ab-desktop{width:1240px;padding:var(--sp-8);background:var(--bg);
-  border:1px solid var(--divider);border-radius:var(--r-card)}
-.d-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:20px}
-.d-header{grid-column:span 12;padding:var(--sp-6)}
-.d-hrow{display:flex;align-items:center;gap:var(--sp-5);flex-wrap:wrap;min-height:36px}
-.d-hrow.b{border-top:1px solid var(--divider);margin-top:var(--sp-5);padding-top:var(--sp-5)}
-.d-path{grid-column:span 8;padding:var(--sp-6)}
-.d-tool{grid-column:span 4;padding:var(--sp-6)}
-.d-tile{grid-column:span 3}
-.d-hand{grid-column:span 12;background:var(--surface-2);border:1px solid var(--divider);
-  border-radius:var(--r-card);padding:var(--sp-5) var(--sp-6)}
-.d-bar{grid-column:span 12;padding:var(--sp-5) var(--sp-6);display:flex;gap:var(--sp-4);align-items:center;flex-wrap:wrap}
-.d-banner{grid-column:span 12}
-
-/* ===== artboard: phone ===================================================== */
-.ab-phone{width:390px;height:844px;background:var(--bg);border:1px solid var(--divider);
-  border-radius:28px;overflow:hidden;display:flex;flex-direction:column;position:relative}
-.p-head{height:56px;flex:none;display:flex;align-items:center;gap:var(--sp-4);
-  padding:0 var(--sp-5);border-bottom:1px solid var(--divider);background:var(--bg)}
-.p-body{flex:1;overflow:auto;padding:var(--sp-5);display:flex;flex-direction:column;gap:var(--sp-5)}
-.p-body .t-meta,.p-body .t-reason{font-size:13.5px;line-height:18px}
-.p-body .t-measure-xl{font-size:26px;line-height:28px}
-.p-foot{height:64px;flex:none;display:flex;align-items:center;gap:var(--sp-4);
-  padding:0 var(--sp-5);border-top:1px solid var(--divider);background:var(--bg)}
-.p-foot .btn{min-height:48px;flex:1}
-.p-tile{background:var(--surface-1);border:1px solid var(--divider);border-radius:var(--r-card);
-  padding:var(--sp-5) var(--sp-5) var(--sp-5) var(--sp-6);position:relative;overflow:hidden}
-.p-tile .rule{position:absolute;left:0;top:0;bottom:0;width:3px}
-.p-tile .btn{min-height:48px}
-.p-actions{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);margin-top:var(--sp-5)}
-
-/* ===== artboard: KlipperScreen 800x480 ===================================== */
-.ab-ks{width:800px;height:480px;background:var(--bg);border:1px solid var(--divider);
-  padding:8px;display:flex;flex-direction:column;gap:6px;overflow:hidden;
-  font-family:var(--font-ui)}
-.ks-head{height:48px;flex:none;display:flex;align-items:center;gap:12px;
-  background:var(--surface-1);border:1px solid var(--divider);border-radius:var(--r-card);padding:0 12px}
-.ks-ctx{height:26px;flex:none;display:flex;align-items:center;padding:0 4px;
-  font:500 13px/16px var(--font-ui);color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ks-row{height:300px;flex:none;display:flex;gap:8px}
-.ks-tile{width:148px;flex:none;background:var(--surface-1);border:1px solid var(--divider);
-  border-radius:var(--r-card);padding:8px;position:relative;overflow:hidden;display:flex;flex-direction:column}
-.ks-tile .rule{position:absolute;left:0;top:0;bottom:0;width:4px}
-.ks-tool{width:160px;flex:none;background:var(--surface-1);border:1px solid var(--divider);
-  border-radius:var(--r-card);padding:8px 10px}
-.ks-foot{height:72px;flex:none;display:flex;gap:8px}
+/* artboards */
+.ab-card{width:600px;height:400px;background:var(--bg);border:1px solid var(--divider);border-radius:var(--r-card);
+  padding:10px;display:flex;flex-direction:column;gap:8px;overflow:hidden}
+.ab-page{width:1240px;padding:var(--sp-8);background:var(--bg);border:1px solid var(--divider);border-radius:var(--r-card)}
+.ab-phone{width:390px;height:844px;background:var(--bg);border:1px solid var(--divider);border-radius:28px;
+  overflow:hidden;display:flex;flex-direction:column}
+.ab-ks{width:800px;height:480px;background:var(--bg);border:1px solid var(--divider);padding:8px;
+  display:flex;flex-direction:column;gap:6px;overflow:hidden}
+.pgrid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:20px}
 .ks-foot .btn{flex:1;min-height:72px;font-size:14px}
-.ks-btn{min-height:52px;font-size:14px}
-.ks-stop{width:148px;min-height:48px}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:1ms!important;transition-duration:1ms!important}}
 </style>
 </head>
 <body>
@@ -241,938 +161,982 @@ body{
 <div class="chrome">
   <div class="chrome-in">
     <h1>ACE panel — design mockup</h1>
-    <span class="pill" id="specNote">docs/12-panel-visual-design.md</span>
-    <div class="spacer"></div>
-    <div class="states" id="states"></div>
+    <span class="pill" id="note">live state</span>
+    <span style="flex:1"></span>
+    <div class="chips" id="states"></div>
     <button class="seg" id="theme" aria-pressed="false">Light theme</button>
   </div>
 </div>
 
 <div class="page">
-  <p class="t-meta" style="max-width:82ch;margin:0 0 var(--sp-6)">
-    Every value below comes from a mock object shaped exactly like Moonraker's
-    <span class="mono">notify_status_update</span> payload, using the same field paths as the
-    specification's data table. Nothing sends gcode — each control carries its command in a
-    <span class="mono">data-gcode</span> attribute, and disabled controls show the reason the
-    specification requires. Default state is the live machine as captured 2026-08-31.
+  <p class="t-meta" style="max-width:88ch;margin:0 0 var(--sp-6)">
+    Rendered from a mock object shaped exactly like Moonraker's <span class="mono">notify_status_update</span>
+    payload, using the field paths in the specification's data table. Nothing sends gcode — every control
+    carries its command in <span class="mono">data-gcode</span>, and disabled controls show the reason.
+    Default state is the live machine as captured 2026-08-31: T2 staged 884.1 mm, auto-dry armed at 20 %RH,
+    <span class="mono">toolhead_entry</span> switched off.
   </p>
 
   <div class="board-label">
-    <h2 class="t-title" style="margin:0">Desktop / wide browser</h2>
-    <span class="dims">1240 px content · 12 columns · 20 px gutter</span>
+    <h2 class="t-title" style="margin:0">1 · Dashboard card</h2>
+    <span class="dims">600 x 400 · Mainsail webcam iframe at 3:2 · carries the floor: nothing critical lives elsewhere</span>
   </div>
-  <div class="scroller"><div class="ab-desktop" id="abDesktop"></div></div>
+  <div class="scroller"><div class="ab-card" id="abCard"></div></div>
 
   <div class="board-label">
-    <h2 class="t-title" style="margin:0">Phone portrait</h2>
-    <span class="dims">390 x 844 · 48 px touch targets · sticky header and action bar</span>
+    <h2 class="t-title" style="margin:0">2 · Full page</h2>
+    <span class="dims">/ace/#lane=N · same file, layout chosen by width · the card asserts, the page shows its working</span>
+  </div>
+  <div class="scroller"><div class="ab-page" id="abPage"></div></div>
+
+  <div class="board-label">
+    <h2 class="t-title" style="margin:0">3 · Phone portrait</h2>
+    <span class="dims">390 x 844 · 48 px targets</span>
   </div>
   <div class="scroller"><div class="ab-phone" id="abPhone"></div></div>
 
   <div class="board-label">
-    <h2 class="t-title" style="margin:0">KlipperScreen</h2>
-    <span class="dims">800 x 480 at true size · one screen, no scrolling · 48 px minimum target</span>
+    <h2 class="t-title" style="margin:0">4 · KlipperScreen</h2>
+    <span class="dims">800 x 480 true size · sufficiency, not depth · separate build (GTK cannot host an iframe)</span>
   </div>
   <div class="scroller"><div class="ab-ks" id="abKs"></div></div>
 
   <div class="board-label">
     <h2 class="t-title" style="margin:0">Mock payload</h2>
-    <span class="dims">the object the three artboards above are rendered from</span>
+    <span class="dims">the object all four artboards render from</span>
   </div>
-  <pre class="card mono" id="payload" style="padding:var(--sp-6);overflow:auto;max-height:340px;
-    font-size:12px;line-height:17px;color:var(--text-dim);margin:0"></pre>
+  <pre class="card mono" id="payload" style="padding:var(--sp-6);overflow:auto;max-height:320px;font-size:12px;line-height:17px;color:var(--text-dim);margin:0"></pre>
 </div>
 
 <script>
 "use strict";
 
-/* ==========================================================================
-   MOCK DATA — shaped exactly like Moonraker notify_status_update
-   Base is the live capture from 10.49.9.130:7125 on 2026-08-31.
-   ========================================================================== */
+/* ===========================================================================
+   MOCK PAYLOAD — Moonraker notify_status_update shape.
+   Base = live capture from 10.49.9.130:7125, 2026-08-31.
+   =========================================================================== */
+function base(){return{
+ "mmu_machine":{unit_0:{name:"ACE 2 Pro",vendor:"Anycubic",version:"V1.1.3W",num_gates:6}},
+ "ace":{current_index:-1,target_index:-1},
+ "ace_instance_0":{connection_state:"connected",status:"ready",firmware:"V1.1.3W",
+   temp:28,humidity:23,
+   dryer_status:{status:"stop",state_detail:"stop",target_temp:0,duration:0,remain_time:0},
+   slots:[
+    {index:0,status:"empty",color:[0,0,0],material:"",rfid:false,total:0,current:0},
+    {index:1,status:"ready",color:[0,0,0],material:"Unknown",rfid:false,total:0,current:0},
+    {index:2,status:"ready",color:[247,217,89],material:"PLA",rfid:true,total:335,current:0,sku:"SM24"},
+    {index:3,status:"empty",color:[0,0,0],material:"",rfid:false,total:0,current:0}]},
+ "ace_preload_guard":{enabled:true,path_busy:false,staged:{"2":884.1},trips:0,refusals:0},
+ "ace_buffer_watch":{stale:false,age:2.5,jam:false,jam_tool:-1,last_event:"",offrest_seconds:0,
+   inserted:[false,true,true,false],at_rest:[true,true,true,true],
+   lane_empty:[false,false,false,false]},
+ "ace_hub_encoder":{hooked:true,pulses:0,distance_mm:0,mm_per_pulse:0.93266031903447,moving:false},
+ "mmu":{num_gates:6,manual_tools:[4,5],in_melt_zone:false,cold_unload_ok:true,
+   gate_status:[0,1,1,0,1,1],gate_material:["","","PLA","","",""],
+   gate_filament_name:["","","Bambu Lab Yellow PLA","","",""],
+   gate_spool_id:[-1,-1,24,-1,-1,-1],gate_temperature:[0,0,210,0,0,0],
+   gate_color_rgb:[[0,0,0],[0,0,0],[247,217,89],[0,0,0],[0,0,0],[0,0,0]],
+   spoolman_support:"readonly",
+   filament_pos_per_gate:[0,0,0,0,0,0],          /* collapsed - never drawn as state */
+   filament_position_per_gate:[0,0,884.1,0],
+   bowden_progress:-1},                           /* hardcoded - never drawn */
+ "save_variables":{variables:{
+   ace_staged_mm:[0,0,884.1,0],
+   ace_lane_pos:["gate","parked","parked","gate"],  /* holds a value nothing writes */
+   ace_cal_park_to_hub:[0,0,0,0],
+   ace_cal_hub_to_entry:555.9,ace_park_to_entry:1490,ace_cal_when:"2026-08-21 11:22",
+   ace_op:"",filament_loaded_hot:0,filament_parked:0,
+   ace_autodry_active:1,ace_autodry_target_rh:20,ace_autodry_temp:45,
+   ace_dryroll_active:0,ace_bypass_loaded:0,meltzone_mm:22,ptfe_gears_to_postgear:18}},
+ "filament_switch_sensor hub_detect":{filament_detected:false,enabled:true,reading:4.8},
+ "filament_switch_sensor toolhead_entry":{filament_detected:false,enabled:false},
+ "filament_switch_sensor toolhead_postgear":{filament_detected:false,enabled:true},
+ "print_stats":{state:"standby",filename:""},
+ "idle_timeout":{state:"Idle"},
+ "gcode_macro ACE_AUDIT":{ok:1,why:"",toolhead:""},
+ "gcode_macro ACE_LANE_EJECT":{tool:-1,running:0,do_home:1},
+ "gcode_macro ACE_AUTODRY":{active:1,target_rh:20,hyst:3,temp:45,interval:10},
+ "gcode_macro _ACE_SUPPRESSION_ARM":{armed_swapping:0,armed_parking:0,seconds:300},
+ "gcode_macro _ACE_DRY_PRESETS":{table:{
+   PLA:{temp:45,rh:20,min:240}, PETG:{temp:55,rh:20,min:240},
+   ABS:{temp:55,rh:15,min:240}, ASA:{temp:55,rh:15,min:240},
+   TPU:{temp:45,rh:15,min:300}, PA:{temp:55,rh:10,min:480},
+   PC:{temp:55,rh:10,min:360},  PVA:{temp:45,rh:15,min:240}}},
+ "_rail":[]
+};}
 
-function base() {
-  return {
-    "mmu_machine": { unit_0: { name: "ACE 2 Pro", vendor: "Anycubic", version: "V1.1.3W", num_gates: 6 } },
-    "ace": { current_index: -1, target_index: -1 },
-    "ace_instance_0": {
-      connection_state: "connected", status: "ready", firmware: "V1.1.3W",
-      model: "ACE2 (USB Single Serial)", usb_port: "/dev/ttyACM0",
-      temp: 28, humidity: 23,
-      dryer_status: { status: "stop", state_detail: "stop", target_temp: 0, duration: 0, remain_time: 0 },
-      slots: [
-        { index:0, status:"empty", color:[0,0,0],       material:"",        rfid:false, total:0,   current:0 },
-        { index:1, status:"ready", color:[0,0,0],       material:"Unknown", rfid:false, total:0,   current:0 },
-        { index:2, status:"ready", color:[247,217,89],  material:"PLA",     rfid:true,  total:335, current:0, sku:"SM24" },
-        { index:3, status:"empty", color:[0,0,0],       material:"",        rfid:false, total:0,   current:0 }
-      ]
-    },
-    "ace_preload_guard": { enabled:true, path_busy:false, staged:{ "2":884.1 }, trips:0, refusals:0 },
-    "ace_buffer_watch": {
-      stale:false, jam:false, jam_tool:-1, last_event:"", offrest_seconds:0.0,
-      armed:false, armed_tool:-1,
-      inserted:[false,true,true,false], at_rest:[true,true,true,true],
-      lane_empty:[false,false,false,false]     /* dead field — never drawn */
-    },
-    "ace_hub_encoder": { hooked:true, pulses:0, distance_mm:0.0, mm_per_pulse:0.93266031903447, moving:false },
-    "mmu": {
-      num_gates:6, manual_tools:[4,5], in_melt_zone:false, cold_unload_ok:true,
-      gate_status:[0,1,1,0,1,1],
-      gate_material:["","","PLA","","",""],
-      gate_material_family:["","","PLA","","",""],
-      gate_filament_name:["","","Bambu Lab Yellow PLA","","",""],
-      gate_spool_id:[-1,-1,24,-1,-1,-1],
-      gate_temperature:[0,0,210,0,0,0],
-      gate_consumed_mm:[0,0,0,0,0,0],
-      gate_color_rgb:[[0,0,0],[0,0,0],[247,217,89],[0,0,0],[0,0,0],[0,0,0]],
-      spoolman_support:"readonly",
-      filament_pos_per_gate:[0,0,0,0,0,0],       /* collapsed — never drawn as state */
-      filament_position_per_gate:[0.0,0.0,884.1,0.0],
-      bowden_progress:-1                          /* hardcoded — never drawn */
-    },
-    "save_variables": { variables: {
-      ace_staged_mm:[0.0,0.0,884.1,0.0],
-      ace_lane_pos:["gate","parked","parked","gate"],   /* holds a value nothing writes */
-      ace_cal_park_to_hub:[0,0,0,0],
-      ace_cal_hub_to_entry:555.9, ace_park_to_entry:1490.0,
-      ace_cal_when:"2026-08-21 11:22",
-      ace_op:"", filament_loaded_hot:0, filament_parked:0,
-      ace_autodry_active:1, ace_dryroll_active:0, ace_bypass_loaded:0,
-      meltzone_mm:22.0
-    }},
-    "filament_switch_sensor hub_detect":       { filament_detected:false, enabled:true,  reading:4.8 },
-    "filament_switch_sensor toolhead_entry":   { filament_detected:false, enabled:false },
-    "filament_switch_sensor toolhead_postgear":{ filament_detected:false, enabled:true },
-    "print_stats": { state:"standby", filename:"" },
-    "idle_timeout": { state:"Idle" },
-    "gcode_macro ACE_AUDIT": { ok:1, why:"", toolhead:"" },
-    "gcode_macro ACE_LANE_EJECT": { tool:-1, running:0, do_home:1 },
-    "gcode_macro ACE_AUTODRY": { active:1, target_rh:20, temp:45, interval:10 },
-    "gcode_macro _ACE_SUPPRESSION_ARM": { armed_swapping:0, armed_parking:0, seconds:300 },
-    "gcode_macro _ACE_DRYROLL_VARS": { allow_printing:0, interval:300 }
-  };
-}
+/* rail items are shaped like what the matcher would lift out of notify_gcode_response */
+const RAIL = (cmd,msg,err,age)=>({cmd:cmd,msg:msg,err:!!err,age:age||"2m"});
 
-/* --- the eight states that decide behaviour ------------------------------- */
-const STATES = {
-  live: { label: "Live (staged)", note: "The machine as captured: T2 staged 884.1 of 934.1 mm, nothing at the toolhead.", make: s => s },
+const STATES={
+ live:{label:"Live",note:"T2 staged 884.1 mm · auto-dry armed at 20 %RH · entry sensor switched off",
+   make:s=>s},
 
-  idle: { label: "Idle", note: "Nothing staged, nothing loaded. T1 and T2 sit at the gate.",
-    make: s => { s.ace_preload_guard.staged = {};
-      s.save_variables.variables.ace_staged_mm = [0,0,0,0];
-      s.mmu.filament_position_per_gate = [0,0,0,0];
-      s["gcode_macro ACE_AUDIT"] = { ok:1, why:"", toolhead:"EMPTY" };
-      return s; } },
+ idle:{label:"Idle",note:"Nothing staged, nothing loaded.",
+   make:s=>{s.ace_preload_guard.staged={};s.save_variables.variables.ace_staged_mm=[0,0,0,0];
+     s["gcode_macro ACE_AUDIT"]={ok:1,why:"",toolhead:"EMPTY"};return s;}},
 
-  printing: { label: "Loaded + printing", note: "T2 loaded, tip in the melt zone, print running. Both toolhead sensors enabled and lit.",
-    make: s => { s.ace.current_index = 2;
-      s.ace_instance_0.slots[2].status = "shifting";
-      s.mmu.in_melt_zone = true; s.mmu.cold_unload_ok = false;
-      s["filament_switch_sensor hub_detect"].filament_detected = true;
-      s["filament_switch_sensor toolhead_entry"] = { filament_detected:true, enabled:true };
-      s["filament_switch_sensor toolhead_postgear"].filament_detected = true;
-      s.save_variables.variables.filament_loaded_hot = 1;
-      s.save_variables.variables.ace_staged_mm = [0,0,934.1,0];
-      s.print_stats = { state:"printing", filename:"bracket_v4.gcode" };
-      s.idle_timeout.state = "Printing";
-      s.ace_hub_encoder.moving = true; s.ace_hub_encoder.distance_mm = 555.9;
-      s["gcode_macro ACE_AUDIT"] = { ok:1, why:"", toolhead:"LOADED" };
-      return s; } },
+ printing:{label:"Loaded + printing",note:"T2 loaded, tip in the melt zone, both toolhead sensors enabled and lit.",
+   make:s=>{s.ace.current_index=2;s.ace_instance_0.slots[2].status="shifting";
+     s.mmu.in_melt_zone=true;s.mmu.cold_unload_ok=false;
+     s["filament_switch_sensor hub_detect"].filament_detected=true;
+     s["filament_switch_sensor toolhead_entry"]={filament_detected:true,enabled:true};
+     s["filament_switch_sensor toolhead_postgear"].filament_detected=true;
+     s.save_variables.variables.filament_loaded_hot=1;
+     s.save_variables.variables.ace_staged_mm=[0,0,1590,0];
+     s.print_stats={state:"printing",filename:"bracket_v4.gcode"};s.idle_timeout.state="Printing";
+     s.ace_hub_encoder.moving=true;s.ace_hub_encoder.distance_mm=555.9;
+     s["gcode_macro ACE_AUDIT"]={ok:1,why:"",toolhead:"LOADED"};return s;}},
 
-  busy: { label: "Path busy", note: "A load to T2 is in flight. Every motion control is disabled with the owning lane named.",
-    make: s => { s.ace_preload_guard.path_busy = true;
-      s.ace.target_index = 2;
-      s.ace_hub_encoder.moving = true; s.ace_hub_encoder.distance_mm = 210.4;
-      s["filament_switch_sensor hub_detect"].filament_detected = true;
-      s["gcode_macro ACE_AUDIT"] = { ok:1, why:"", toolhead:"EMPTY" };
-      return s; } },
+ busy:{label:"Path busy",note:"A load to T2 is in flight. Every motion control is disabled, naming the owner.",
+   make:s=>{s.ace_preload_guard.path_busy=true;s.ace.target_index=2;
+     s.ace_hub_encoder.moving=true;s.ace_hub_encoder.distance_mm=210.4;
+     s["filament_switch_sensor hub_detect"].filament_detected=true;
+     s.save_variables.variables.ace_staged_mm=[0,0,1145,0];
+     s["gcode_macro ACE_AUDIT"]={ok:1,why:"",toolhead:"EMPTY"};return s;}},
 
-  jam: { label: "Jam latched", note: "ace_buffer_watch.jam is set on T2. This design surfaces it and does not block on it — see the QA flag.",
-    make: s => { s.ace_buffer_watch.jam = true; s.ace_buffer_watch.jam_tool = 2;
-      s.ace_buffer_watch.last_event = "offrest"; s.ace_buffer_watch.offrest_seconds = 3.4;
-      s.ace_buffer_watch.at_rest = [true,true,false,true];
-      s["gcode_macro ACE_AUDIT"] = { ok:1, why:"", toolhead:"EMPTY" };
-      return s; } },
+ jam:{label:"Jam latched",note:"jam set on T2. Surfaced, not blocked on — nothing in the config gates on this flag.",
+   make:s=>{s.ace_buffer_watch.jam=true;s.ace_buffer_watch.jam_tool=2;
+     s.ace_buffer_watch.last_event="offrest";s.ace_buffer_watch.offrest_seconds=3.4;
+     s.ace_buffer_watch.at_rest=[true,true,false,true];
+     s["gcode_macro ACE_AUDIT"]={ok:1,why:"",toolhead:"EMPTY"};
+     s._rail=[RAIL("ACE_BUFFER_DISARM","Buffer watch latched on T2 - clear with ACE_BUFFER_DISARM",true,"1m")];
+     return s;}},
 
-  sensorfault: { label: "Sensor fault", note: "entry=0 with post-gear=1, both switches enabled. Impossible on a continuous strand.",
-    make: s => { s["filament_switch_sensor toolhead_entry"] = { filament_detected:false, enabled:true };
-      s["filament_switch_sensor toolhead_postgear"].filament_detected = true;
-      s["gcode_macro ACE_AUDIT"] = { ok:0, toolhead:"ANOMALY",
-        why:"post-gear reads filament while entry does not - broken strand or a dead switch" };
-      return s; } },
+ orphan:{label:"Orphaned lane",note:"Filament at the toolhead that no lane claims. Force-eject is the only way out, and it is on the card.",
+   make:s=>{s["filament_switch_sensor toolhead_entry"]={filament_detected:true,enabled:true};
+     s["filament_switch_sensor toolhead_postgear"].filament_detected=true;
+     s["filament_switch_sensor hub_detect"].filament_detected=true;
+     s.ace.current_index=-1;
+     s["gcode_macro ACE_AUDIT"]={ok:0,toolhead:"ANOMALY",
+       why:"toolhead holds filament but NO lane is recorded (current_index=-1)"};
+     s._rail=[RAIL("MMU_RECOVER GATE=2","filament is at the toolhead but no lane owns it - run MMU_RECOVER GATE=<n>",true,"2m"),
+              RAIL("ACE_AUDIT","run ACE_AUDIT to see where the filament is",false,"2m")];
+     return s;}},
 
-  stale: { label: "Stale / unknown", note: "ace_buffer_watch.stale is true. Lane presence is unknown, never empty, and motion is refused.",
-    make: s => { s.ace_buffer_watch.stale = true; s.ace_buffer_watch.age = 41.2;
-      s["gcode_macro ACE_AUDIT"] = { ok:1, why:"", toolhead:"" };
-      return s; } },
+ sensorfault:{label:"Sensor fault",note:"entry=0 with post-gear=1, both enabled. Impossible on a continuous strand.",
+   make:s=>{s["filament_switch_sensor toolhead_entry"]={filament_detected:false,enabled:true};
+     s["filament_switch_sensor toolhead_postgear"].filament_detected=true;
+     s["gcode_macro ACE_AUDIT"]={ok:0,toolhead:"ANOMALY",
+       why:"post-gear reads filament while entry does not - broken strand or a dead switch"};
+     return s;}},
 
-  drying: { label: "Dryer running", note: "Dryer at 45 C with 2 h 14 m left, auto-dry holding 20 %RH.",
-    make: s => { s.ace_instance_0.dryer_status = { status:"drying", state_detail:"drying",
-        target_temp:45, duration:14400, remain_time:8040 };
-      s.ace_instance_0.temp = 44; s.ace_instance_0.humidity = 14;
-      s["gcode_macro ACE_AUDIT"] = { ok:1, why:"", toolhead:"EMPTY" };
-      return s; } }
+ suppression:{label:"Suppression stuck",note:"A swap watchdog flag never cleared. _ACE_SUPPRESSION_DISARM is underscore-hidden and called by nothing.",
+   make:s=>{s["gcode_macro _ACE_SUPPRESSION_ARM"]={armed_swapping:1,armed_parking:0,seconds:300};
+     s.save_variables.variables.ace_op="toolchange T2->T1 interrupted";
+     s.ace.current_index=2;s.ace.target_index=1;
+     s.save_variables.variables.ace_staged_mm=[0,0,1590,0];
+     s["filament_switch_sensor toolhead_entry"]={filament_detected:true,enabled:true};
+     s["filament_switch_sensor toolhead_postgear"].filament_detected=true;
+     s["gcode_macro ACE_AUDIT"]={ok:0,toolhead:"ANOMALY",
+       why:"OPEN INTENT: toolchange T2->T1 interrupted never committed - state is indeterminate"};
+     s._rail=[RAIL("MMU_UNLOCK","MMU_UNLOCK to clear the marker, then ACE_CLEAR_OP to close this open intent",true,"4m"),
+              RAIL("ACE_CLEAR_OP","toolchange T2->T1 was interrupted with filament still in the toolhead",true,"4m")];
+     return s;}},
+
+ stale:{label:"Stale / unknown",note:"buffer_watch.stale is true. Presence is unknown, never empty, and motion is refused.",
+   make:s=>{s.ace_buffer_watch.stale=true;s.ace_buffer_watch.age=41.2;return s;}},
+
+ drying:{label:"Dryer running",note:"One-shot 45 C with 2 h 14 m left.",
+   make:s=>{s.ace_instance_0.dryer_status={status:"drying",state_detail:"drying",target_temp:45,duration:14400,remain_time:8040};
+     s.ace_instance_0.temp=44;s.ace_instance_0.humidity=14;
+     s["gcode_macro ACE_AUDIT"]={ok:1,why:"",toolhead:"EMPTY"};return s;}},
+
+ dryfault:{label:"Dryer fault",note:"dryer_status.status is error. The hold is dropped and the panel must not show 'drying'.",
+   make:s=>{s.ace_instance_0.dryer_status={status:"error",state_detail:"ptc_error",target_temp:45,duration:14400,remain_time:6000};
+     s["gcode_macro ACE_AUTODRY"].active=0;
+     s._rail=[RAIL("ACE_DRY_OFF","ACE auto-dry ABORTED: dryer reports ptc_error",true,"just now")];
+     return s;}}
 };
 
-let current = "live";
-let S = STATES.live.make(base());
+let current="live", S=STATES.live.make(base()), focusLane=2, jogStep=25;
 
-/* ==========================================================================
-   4.1 PREDICATE VOCABULARY — one implementation, three artboards
-   ========================================================================== */
-function pred(S) {
-  const sv    = S.save_variables.variables;
-  const bw    = S.ace_buffer_watch;
-  const entry = S["filament_switch_sensor toolhead_entry"];
-  const post  = S["filament_switch_sensor toolhead_postgear"];
-  const hub   = S["filament_switch_sensor hub_detect"];
-  const ej    = S["gcode_macro ACE_LANE_EJECT"];
-  const audit = S["gcode_macro ACE_AUDIT"];
-  const P = {};
-  P.CONNECTED  = S.ace_instance_0.connection_state === "connected";
-  P.FRESH      = bw.stale === false;
-  P.PRESENT    = [0,1,2,3].map(i => P.FRESH ? bw.inserted[i] === true : null);
-  P.STAGED_MM  = sv.ace_staged_mm;
-  P.STAGED     = [0,1,2,3].map(i => (sv.ace_staged_mm[i] || 0) > 0);
-  P.CUR        = S.ace.current_index;
-  P.TGT        = S.ace.target_index;
-  P.PATH_FREE  = S.ace_preload_guard.path_busy === false;
-  P.OP         = sv.ace_op || "";
-  P.NO_OP      = P.OP === "";
-  P.PRINTING   = ["printing","paused"].indexOf(S.print_stats.state) >= 0;
-  P.SENSORS_OK = !!entry.enabled && !!post.enabled;
-  P.ENTRY      = !!entry.filament_detected;
-  P.POST       = !!post.filament_detected;
-  P.HUB        = !!hub.filament_detected;
-  P.AT_TOOLHEAD= P.ENTRY || P.POST;
-  P.IMPOSSIBLE = P.SENSORS_OK && !P.ENTRY && P.POST;
-  P.EJECTING   = ej.running === 1;
-  P.EJECT_TOOL = ej.tool;
-  P.JAM        = bw.jam === true;
-  P.JAM_TOOL   = bw.jam_tool;
-  P.AUDIT_RUN  = audit.toolhead !== "";
-  P.AUDIT_OK   = audit.ok === 1;
-  P.AUDIT_WHY  = audit.why;
-  P.HOT        = sv.filament_loaded_hot === 1;
-  P.PARKED     = sv.filament_parked === 1;
-  P.DRYING     = S.ace_instance_0.dryer_status.status !== "stop";
-  P.AUTODRY    = S["gcode_macro ACE_AUTODRY"].active === 1;
-  P.ROLLING    = sv.ace_dryroll_active === 1;
-  P.SUPPRESSED = S["gcode_macro _ACE_SUPPRESSION_ARM"].armed_swapping === 1
-              || S["gcode_macro _ACE_SUPPRESSION_ARM"].armed_parking === 1;
-  P.TUBE       = [0,1,2,3].map(i => sv.ace_cal_park_to_hub[i] > 0
-                   ? sv.ace_cal_park_to_hub[i]
-                   : (sv.ace_park_to_entry - sv.ace_cal_hub_to_entry));
-  P.OWNER      = (function(){
-    for (let i=0;i<4;i++) if ((sv.ace_staged_mm[i]||0) >= P.TUBE[i] - 0.05) return i;
-    return P.CUR;                       /* never filament_pos_per_gate.findIndex(p>=2) */
-  })();
-  return P;
+/* ===========================================================================
+   PREDICATES  (spec section 4.1)
+   =========================================================================== */
+function pred(S){
+ const sv=S.save_variables.variables, bw=S.ace_buffer_watch;
+ const en=S["filament_switch_sensor toolhead_entry"], po=S["filament_switch_sensor toolhead_postgear"],
+       hu=S["filament_switch_sensor hub_detect"], ej=S["gcode_macro ACE_LANE_EJECT"],
+       au=S["gcode_macro ACE_AUDIT"];
+ const P={};
+ P.CONNECTED=S.ace_instance_0.connection_state==="connected";
+ P.FRESH=bw.stale===false;
+ P.PRESENT=[0,1,2,3].map(i=>P.FRESH?bw.inserted[i]===true:null);
+ P.MM=sv.ace_staged_mm;
+ P.STAGED=[0,1,2,3].map(i=>(sv.ace_staged_mm[i]||0)>0);
+ P.CUR=S.ace.current_index; P.TGT=S.ace.target_index;
+ P.PATH_FREE=S.ace_preload_guard.path_busy===false;
+ P.OP=sv.ace_op||""; P.NO_OP=P.OP==="";
+ P.PRINTING=["printing","paused"].indexOf(S.print_stats.state)>=0;
+ P.SENSORS_OK=!!en.enabled&&!!po.enabled;
+ P.ENTRY=!!en.filament_detected; P.POST=!!po.filament_detected; P.HUB=!!hu.filament_detected;
+ P.EN_OK=!!en.enabled; P.PO_OK=!!po.enabled; P.HU_OK=!!hu.enabled;
+ P.AT_TOOLHEAD=P.ENTRY||P.POST;
+ P.IMPOSSIBLE=P.SENSORS_OK&&!P.ENTRY&&P.POST;
+ P.EJECTING=ej.running===1; P.EJECT_TOOL=ej.tool;
+ P.JAM=bw.jam===true; P.JAM_TOOL=bw.jam_tool;
+ P.AUDIT_RUN=au.toolhead!==""; P.AUDIT_OK=au.ok===1; P.WHY=au.why;
+ P.HOT=sv.filament_loaded_hot===1; P.PARKED=sv.filament_parked===1;
+ P.DRYING=S.ace_instance_0.dryer_status.status!=="stop";
+ P.DRY_FAULT=S.ace_instance_0.dryer_status.status==="error";
+ P.AUTODRY=S["gcode_macro ACE_AUTODRY"].active===1;
+ P.AUTODRY_ARMED=sv.ace_autodry_active===1;
+ P.SUPPRESSED=S["gcode_macro _ACE_SUPPRESSION_ARM"].armed_swapping===1
+            ||S["gcode_macro _ACE_SUPPRESSION_ARM"].armed_parking===1;
+ /* geometry, to scale: park->hub, hub->entry, entry->gears, gears->melt */
+ P.L_HUB=sv.ace_park_to_entry-sv.ace_cal_hub_to_entry;   /* 934.1 */
+ P.L_ENTRY=sv.ace_cal_hub_to_entry;                       /* 555.9 */
+ P.L_GEARS=sv.ptfe_gears_to_postgear||18;
+ P.L_MELT=80;
+ P.TOTAL=P.L_HUB+P.L_ENTRY+P.L_GEARS+P.L_MELT;
+ P.MARK={edge:0,hub:P.L_HUB,entry:P.L_HUB+P.L_ENTRY,
+         gears:P.L_HUB+P.L_ENTRY+P.L_GEARS,melt:P.TOTAL};
+ /* who owns the shared path: by elimination, and it gives up rather than guessing */
+ P.OWNER=(function(){
+   if(P.CUR>=0)return P.CUR;
+   const st=[0,1,2,3].filter(i=>(sv.ace_staged_mm[i]||0)>=P.L_HUB-0.05);
+   return st.length===1?st[0]:-1;
+ })();
+ P.OWNER_KNOWN=P.OWNER>=0;
+ return P;
 }
 
-/* ==========================================================================
-   4.3 CONTROL TABLE — first matching reason wins
-   ========================================================================== */
-function gate(label, gcode, rank, tests) {
-  for (let k = 0; k < tests.length; k++) {
-    if (tests[k][0]) return { label, gcode, rank, enabled:false, reason:tests[k][1] };
-  }
-  return { label, gcode, rank, enabled:true, reason:"" };
+/* ===========================================================================
+   TIP MODEL  (spec section 9.2) — confidence is a first-class property
+   =========================================================================== */
+const HUB_TOL=18;   /* hub_detect is an ADC threshold polled at 0.3s: ~18mm at 60mm/s */
+
+function tip(i,P){
+ if(P.PRESENT[i]===null) return {tier:"unknown",label:"unknown",mm:null};
+ if(!P.PRESENT[i])       return {tier:"empty",label:"—",mm:0};
+ const mm=P.MM[i]||0;
+ /* which segment is the tip in, and is that segment observed? */
+ if(P.CUR===i&&S.mmu.in_melt_zone)
+   return {tier:"inferred",mm:P.TOTAL,from:P.MARK.gears,to:P.MARK.melt,
+           label:"past the gears · derived, no switch"};
+ if(P.CUR===i&&P.POST&&P.PO_OK)
+   return {tier:"measured",mm:P.MARK.gears,label:"on post-gear · measured"};
+ if(P.CUR===i&&P.ENTRY&&P.EN_OK)
+   return {tier:"measured",mm:P.MARK.entry,label:"on toolhead entry · measured"};
+ if(mm>=P.L_HUB&&P.HUB&&P.HU_OK)
+   return {tier:"measured",mm:P.L_HUB+(S.ace_hub_encoder.distance_mm||0),
+           label:Math.round(S.ace_hub_encoder.distance_mm)+" mm past the hub · encoder"};
+ if(mm>=P.L_HUB&&(!P.HUB||!P.HU_OK))
+   return {tier:"unknown",label:"unknown — the hub sensor cannot confirm it",mm:null};
+ /* ACE edge -> hub: nothing is instrumented here */
+ return {tier:"reckoned",mm:mm,tol:HUB_TOL,
+         label:"at least "+Math.round(mm)+" ±"+HUB_TOL+" mm · reckoned"};
 }
 
-function laneControls(i, P) {
-  const common = [
-    [!P.CONNECTED, "the ACE is disconnected"],
-    [!P.FRESH,     "lane sensors are stale — state is unknown"]
-  ];
-  const tail = [
-    [P.EJECTING && P.EJECT_TOOL !== i, "an eject is running on T" + P.EJECT_TOOL],
-    [!P.PATH_FREE, "the shared path is busy" + (P.OWNER >= 0 ? " — T" + P.OWNER + " owns it" : "")],
-    [P.TGT !== -1, "toolchange T" + P.CUR + "→T" + P.TGT + " is still in flight — reconcile it first"],
-    [!P.NO_OP, "open intent: " + P.OP + " — recover before moving filament"]
-  ];
+/* ===========================================================================
+   CONTROLS  (spec sections 4.3 and 9.3/9.4/9.5)
+   =========================================================================== */
+function gate(label,gcode,rank,tests,extra){
+ for(let k=0;k<tests.length;k++) if(tests[k][0])
+   return Object.assign({label,gcode,rank,enabled:false,reason:tests[k][1]},extra||{});
+ return Object.assign({label,gcode,rank,enabled:true,reason:""},extra||{});
+}
+function busyReason(P){
+ return P.OWNER_KNOWN? "the shared path is busy — T"+P.OWNER+" owns it"
+                     : "the shared path is occupied — which lane cannot be determined";
+}
+function common(P){return[
+ [!P.CONNECTED,"the ACE is disconnected"],
+ [!P.FRESH,"lane sensors are stale — state is unknown"]];}
+function tail(P,i){return[
+ [P.EJECTING&&P.EJECT_TOOL!==i,"an eject is running on T"+P.EJECT_TOOL],
+ [!P.PATH_FREE,busyReason(P)],
+ [P.TGT!==-1,"toolchange T"+P.CUR+"→T"+P.TGT+" is still in flight — reconcile it first"],
+ [!P.NO_OP,"open intent: "+P.OP+" — recover before moving filament"]];}
 
-  const load = gate("Load", "T" + i, "primary", common.concat([
-    [P.PRESENT[i] !== true, "no filament in lane " + i],
-    [P.CUR === i, "T" + i + " is already loaded"],
-    [P.CUR >= 0, "T" + P.CUR + " is loaded — park or eject it first"]
-  ], tail));
+function laneControls(i,P){
+ const C={};
+ /* The orphan test must come before the "another lane is loaded" test: with CUR = -1
+    nothing claims the strand, so no lane-named reason applies and Load would otherwise
+    stay enabled straight into a collision the preload guard would have to catch. */
+ C.load=gate("Load","T"+i,"primary",common(P).concat([
+   [P.PRESENT[i]!==true,"no filament in lane "+i],
+   [P.CUR===i,"T"+i+" is already loaded"],
+   [P.AT_TOOLHEAD&&P.CUR===-1,"filament is at the toolhead that no lane claims — clear it first"],
+   [P.CUR>=0,"T"+P.CUR+" is loaded — park or eject it first"]],tail(P,i)));
 
-  let mid;
-  if (P.STAGED[i] && P.CUR !== i) {
-    mid = gate("Retract → gate", "ACE_LANE_PARK T=" + i + " FORCE=1", "secondary", common.concat([
-      [P.AT_TOOLHEAD, "filament is still at the toolhead — clear it first"]
-    ], tail));
-  } else {
-    mid = gate("Park", "ACE_LANE_PARK T=" + i, "secondary", common.concat([
-      [P.CUR !== i, "T" + i + " is not the loaded lane"],
-      [!P.AT_TOOLHEAD, "nothing at the toolhead to park"]
-    ], tail));
-  }
+ if(P.STAGED[i]&&P.CUR!==i){
+   C.mid=gate("Retract → gate","ACE_LANE_PARK T="+i+" FORCE=1","secondary",common(P).concat([
+     [P.AT_TOOLHEAD,"filament is still at the toolhead — clear it first"]],tail(P,i)));
+ } else {
+   C.mid=gate("Park","ACE_LANE_PARK T="+i,"secondary",common(P).concat([
+     [P.CUR!==i,"T"+i+" is not the loaded lane"],
+     [!P.AT_TOOLHEAD,"nothing at the toolhead to park"]],tail(P,i)));
+ }
 
-  const orphan = P.AT_TOOLHEAD && (P.CUR === -1 || (!P.HOT && !P.PARKED));
-  let eject;
-  if (orphan) {
-    eject = gate("Eject (force)", "ACE_LANE_EJECT T=" + i + " FORCE=1", "destructive", common.concat([
-      [P.EJECTING && P.EJECT_TOOL !== i, "an eject is already running on T" + P.EJECT_TOOL + " — eject lanes one at a time"],
-      [P.AT_TOOLHEAD && P.CUR >= 0 && P.CUR !== i, "the toolhead holds T" + P.CUR + ", not T" + i + ". Unload T" + P.CUR + " first."],
-      [!P.PATH_FREE, "the shared path is busy"]
-    ]));
-    eject.caution = "no lane is recorded as loaded — confirm by eye that this strand is T" + i + "'s before forcing";
-  } else {
-    eject = gate("Eject", "ACE_LANE_EJECT T=" + i, "destructive", common.concat([
-      [P.EJECTING && P.EJECT_TOOL !== i, "an eject is already running on T" + P.EJECT_TOOL + " — eject lanes one at a time"],
-      [P.PRESENT[i] !== true && !P.AT_TOOLHEAD, "T" + i + " is already empty and the path is clear"],
-      [P.AT_TOOLHEAD && P.CUR >= 0 && P.CUR !== i, "the toolhead holds T" + P.CUR + ", not T" + i + ". Unload T" + P.CUR + " first."],
-      [!P.PATH_FREE, "the shared path is busy"]
-    ]));
-  }
+ const orphan=P.AT_TOOLHEAD&&(P.CUR===-1||(!P.HOT&&!P.PARKED));
+ if(orphan){
+   C.eject=gate("Eject (force)","ACE_LANE_EJECT T="+i+" FORCE=1","destructive",common(P).concat([
+     [P.EJECTING&&P.EJECT_TOOL!==i,"an eject is already running on T"+P.EJECT_TOOL+" — eject lanes one at a time"],
+     [P.AT_TOOLHEAD&&P.CUR>=0&&P.CUR!==i,"the toolhead holds T"+P.CUR+", not T"+i+". Unload T"+P.CUR+" first."],
+     [!P.PATH_FREE,busyReason(P)]]),
+     {caution:"no lane is recorded as loaded — confirm by eye that this strand is T"+i+"'s before forcing"});
+ } else {
+   C.eject=gate("Eject","ACE_LANE_EJECT T="+i,"destructive",common(P).concat([
+     [P.EJECTING&&P.EJECT_TOOL!==i,"an eject is already running on T"+P.EJECT_TOOL+" — eject lanes one at a time"],
+     [P.PRESENT[i]!==true&&!P.AT_TOOLHEAD,"T"+i+" is already empty and the path is clear"],
+     [P.AT_TOOLHEAD&&P.CUR>=0&&P.CUR!==i,"the toolhead holds T"+P.CUR+", not T"+i+". Unload T"+P.CUR+" first."],
+     [!P.PATH_FREE,busyReason(P)]]));
+ }
 
-  const assign = gate("Assign spool…", "MMU_GATE_MAP GATE=" + i + " SPOOLID=<id>", "secondary", [
-    [S.mmu.spoolman_support === "", "Spoolman is not reachable"]
-  ]);
+ /* Destination chips. Three of the five have no macro behind them (spec 9.3). */
+ C.dest=[
+  gate("stage","ACE_LANE_NORMALIZE T="+i,"secondary",common(P).concat([
+    [P.HUB,"hub_detect shows filament — clear the path before parking T"+i],
+    [P.ENTRY,"toolhead_entry shows filament — clear the path before parking T"+i],
+    [P.POST,"toolhead_postgear shows filament — clear the path before parking T"+i],
+    [S.ace_instance_0.slots[i].status!=="ready","lane T"+i+" is '"+S.ace_instance_0.slots[i].status+"', not ready"],
+    [P.PRINTING,"not while a print is running"]],tail(P,i)),
+    {hint:"lands 50 mm short of the hub"}),
+  gate("park","ACE_LANE_PARK T="+i+" FORCE=1","secondary",common(P).concat([
+    [P.AT_TOOLHEAD&&P.CUR!==i,"the toolhead holds T"+P.CUR],
+    [!P.STAGED[i]&&P.CUR!==i,"T"+i+" is already back at the gate"]],tail(P,i)),
+    {hint:"723 mm back from entry, clear of the hub"}),
+  gate("load → park at gears","T"+i,"secondary",common(P).concat([
+    [P.PRESENT[i]!==true,"no filament in lane "+i],
+    [P.AT_TOOLHEAD&&P.CUR===-1,"filament is at the toolhead that no lane claims — clear it first"],
+    [P.CUR>=0&&P.CUR!==i,"T"+P.CUR+" is loaded — park or eject it first"]],tail(P,i)),
+    {hint:"two macros: loads to the nozzle, then FILAMENT_PARK retracts"}),
+  {label:"ACE edge",gcode:"",rank:"secondary",enabled:false,
+    reason:"no command parks a tip at the gate and leaves it gripped"},
+  {label:"hub",gcode:"",rank:"secondary",enabled:false,
+    reason:"no command parks a tip on the hub — stage stops 50 mm short"},
+  {label:"entry",gcode:"",rank:"secondary",enabled:false,
+    reason:"no plain feed-to-entry command — ACE_MEASURE_BOWDEN would overwrite the calibration"}
+ ];
 
-  return { load, mid, eject, assign };
+ /* Jog. ACE side via the TRACKED primitives, never ACE_RAW_FEED, never FORCE=1. */
+ const t=tip(i,P);
+ const segUnknown=(t.tier==="unknown"||t.tier==="inferred");
+ const extruderOwns=(P.CUR===i&&P.POST&&P.PO_OK);
+ const jogTests=common(P).concat([
+   [segUnknown,"the tip's position is not known — audit first"],
+   [P.PRESENT[i]!==true,"no filament in lane "+i],
+   [extruderOwns,"the tip is past the gears — the ACE cannot reach it"]],tail(P,i));
+ C.jogFwd=gate("+","ACE_FEED T="+i+" LENGTH="+jogStep+" SPEED=20","secondary",jogTests);
+ C.jogBack=gate("−","ACE_RETRACT T="+i+" LENGTH="+jogStep+" SPEED=20","secondary",jogTests);
+ C.jogExtFwd=gate("+ extruder","FORCE_MOVE STEPPER=extruder DISTANCE="+jogStep+" VELOCITY=5","secondary",
+   [[!extruderOwns,"the tip is in the ACE's segment — the extruder cannot reach it"],
+    [segUnknown,"the tip's position is not known — audit first"]]);
+ C.jogExtBack=gate("− extruder","FORCE_MOVE STEPPER=extruder DISTANCE=-"+jogStep+" VELOCITY=5","secondary",
+   [[!extruderOwns,"the tip is in the ACE's segment — the extruder cannot reach it"],
+    [segUnknown,"the tip's position is not known — audit first"]]);
+
+ /* RFID */
+ C.tagRead=gate("Re-read tag","ACE_SCAN_TAG T="+i,"secondary",[
+   [!P.CONNECTED,"the ACE is disconnected"],
+   [S.ace_instance_0.slots[i].status==="empty","T"+i+" is empty — nothing to read"]],
+   {hint:"fetches what the ACE has already decoded — the ACE only reads while the spool turns"});
+ C.tagWrite={label:"Write tag",gcode:"",rank:"secondary",enabled:false,
+   reason:"this firmware has no tag-write command"};
+
+ C.assign=gate("Assign spool…","MMU_GATE_MAP GATE="+i+" SPOOLID=<id>","secondary",
+   [[S.mmu.spoolman_support==="","Spoolman is not reachable"]]);
+ return C;
 }
 
-function globalControls(P) {
-  return {
-    stop:   { label:"STOP ALL", gcode:"ACE_STOP_ALL", rank:"destructive", enabled:true, reason:"" },
-    audit:  { label: P.AUDIT_RUN ? "Run audit" : "Run audit", gcode:"ACE_AUDIT",
-              rank: P.AUDIT_RUN ? "secondary" : "primary", enabled:true, reason:"" },
-    recover:gate("Recover", "MMU_RECOVER", "secondary", [[!P.CONNECTED,"the ACE is disconnected"]]),
-    clearop:gate("Clear op", "ACE_CLEAR_OP", "secondary", [[P.NO_OP,"no open intent recorded"]]),
-    unlock: gate("Unlock toolchange", "MMU_UNLOCK", "secondary", [[P.TGT === -1,"no toolchange is in flight"]]),
-    recon:  gate("Reconcile target", "ACE_RECONCILE_TARGET", "secondary", [[P.TGT === -1,"no toolchange marker to resolve"]]),
-    supp:   { label:"Clear suppression", gcode:"_ACE_SUPPRESSION_DISARM", rank:"secondary", enabled:true,
-              reason:"suppression: " + (P.SUPPRESSED ? "armed" : "clear") },
-    jamclr: gate("Clear jam on T" + P.JAM_TOOL, "ACE_BUFFER_DISARM", "primary", [[!P.JAM,"no jam is latched"]]),
-    dry:    gate("Dry 4 h", "ACE_DRY TEMP=45 MINUTES=240", "secondary",
-              [[!P.CONNECTED,"the ACE is disconnected"],[P.DRYING,"the dryer is already running"]]),
-    drystop:gate("Stop drying", "ACE_DRY_OFF", "destructive",
-              [[!P.DRYING && !P.AUTODRY,"the dryer is idle and auto-dry is off"]]),
-    autodry:gate("Auto-dry", "ACE_AUTODRY MATERIAL=PLA", "secondary",
-              [[!P.CONNECTED,"the ACE is disconnected"],
-               [P.AUTODRY,"auto-dry is already holding " + S["gcode_macro ACE_AUTODRY"].target_rh + " %RH"]]),
-    roll:   gate("Roll", "ACE_DRYROLL_START", "secondary", [
-              [!P.CONNECTED,"the ACE is disconnected"],
-              [!P.AUDIT_RUN,"run an audit first — coherence has not been checked"],
-              [!P.AUDIT_OK,"state is not coherent: " + P.AUDIT_WHY],
-              [P.PRINTING && S["gcode_macro _ACE_DRYROLL_VARS"].allow_printing === 0,"rolling is disabled during a print"]]),
-    cal:    gate("Calibrate path", "ACE_CALIBRATE_PATH T=2 FROM_PARK=1", "secondary", [
-              [P.HUB,"hub_detect already shows filament — clear the path first"],
-              [P.ENTRY,"toolhead_entry already shows filament — clear the path first"],
-              [P.POST,"toolhead_postgear already shows filament — clear the path first"],
-              [P.PRINTING,"not while a print is running"]]),
-    scan:   gate("Scan tags", "ACE_SCAN_TAGS", "secondary", [
-              [!P.CONNECTED,"the ACE is disconnected"],
-              [S.ace_instance_0.slots.every(s => s.status === "empty"),
-               "every lane reads empty — nothing to scan"]]),
-    query:  { label:"Query sensors", gcode:"QUERY_FILAMENT_SENSOR SENSOR=toolhead_entry",
-              rank:"secondary", enabled:true, reason:"" }
-  };
+function globals(P){
+ const A=S["gcode_macro ACE_AUTODRY"];
+ return{
+  stop:{label:"STOP ALL",gcode:"ACE_STOP_ALL",rank:"destructive",enabled:true,reason:""},
+  audit:{label:P.AUDIT_RUN?"Run audit":"Run audit",gcode:"ACE_AUDIT",
+         rank:P.AUDIT_RUN?"secondary":"primary",enabled:true,reason:""},
+  recover:gate("Recover","MMU_RECOVER","secondary",[[!P.CONNECTED,"the ACE is disconnected"]]),
+  clearop:gate("Clear op","ACE_CLEAR_OP","secondary",[[P.NO_OP,"no open intent recorded"]]),
+  unlock:gate("Unlock toolchange","MMU_UNLOCK","secondary",[[P.TGT===-1,"no toolchange is in flight"]]),
+  recon:gate("Reconcile target","ACE_RECONCILE_TARGET","secondary",[[P.TGT===-1,"no toolchange marker to resolve"]]),
+  supp:{label:"Clear suppression",gcode:"_ACE_SUPPRESSION_DISARM",rank:P.SUPPRESSED?"primary":"secondary",
+        enabled:true,reason:"suppression: "+(P.SUPPRESSED?"armed (swapping)":"clear")},
+  jamclr:gate("Clear jam on T"+P.JAM_TOOL,"ACE_BUFFER_DISARM","primary",[[!P.JAM,"no jam is latched"]]),
+  query:{label:"Query sensors",gcode:"QUERY_FILAMENT_SENSOR SENSOR=toolhead_entry",rank:"secondary",enabled:true,reason:""},
+  scan:gate("Re-read all tags","ACE_SCAN_TAGS","secondary",[
+    [!P.CONNECTED,"the ACE is disconnected"],
+    [S.ace_instance_0.slots.every(x=>x.status==="empty"),"every lane reads empty — nothing to scan"]]),
+  cal:gate("Calibrate path","ACE_CALIBRATE_PATH T="+focusLane+" FROM_PARK=1","secondary",[
+    [P.HUB,"hub_detect already shows filament — clear the path first"],
+    [P.ENTRY,"toolhead_entry already shows filament — clear the path first"],
+    [P.POST,"toolhead_postgear already shows filament — clear the path first"],
+    [P.PRINTING,"not while a print is running"]]),
+  norm:gate("Normalize lanes","ACE_LANE_NORMALIZE ALL=1","secondary",[
+    [P.HUB,"hub_detect shows filament — clear the path first"],
+    [P.PRINTING,"not while a print is running"]]),
+  dry:gate("Dry","ACE_DRY MATERIAL=PLA","secondary",[
+    [!P.CONNECTED,"the ACE is disconnected"],
+    [P.DRY_FAULT,"the dryer has faulted — clear the fault first"],
+    [P.DRYING,"the dryer is already running"]]),
+  autodry:gate("Auto-dry","ACE_AUTODRY MATERIAL=PLA","secondary",[
+    [!P.CONNECTED,"the ACE is disconnected"],
+    [P.DRY_FAULT,"the dryer has faulted — clear the fault first"],
+    [S.ace_instance_0.humidity==null,"no humidity reading — auto-dry cannot hold a target it cannot measure"],
+    [P.AUTODRY,"auto-dry is already holding ≤ "+A.target_rh+" %RH"]]),
+  drystop:gate("Stop","ACE_DRY_OFF","destructive",[
+    [!P.DRYING&&!P.AUTODRY,"the dryer is idle and auto-dry is off"]],
+    {hint:"also cancels auto-dry"}),
+  bypass:gate("Select bypass","MMU_SELECT_BYPASS","secondary",[
+    [!P.AT_TOOLHEAD&&!P.HUB,"no filament at the hub or the toolhead — nothing to mark as bypass"]]),
+  guard:{label:"Preload guard status",gcode:"ACE_PRELOAD_GUARD_STATUS",rank:"secondary",enabled:true,reason:""},
+  bufst:{label:"Buffer state",gcode:"ACE_BUFFER_STATE",rank:"secondary",enabled:true,reason:""},
+  pstate:{label:"Printer state",gcode:"PRINTER_STATE",rank:"secondary",enabled:true,reason:""},
+  cleanup:{label:"Cleanup stale vars",gcode:"ACE_CLEANUP_STALE_VARS",rank:"secondary",enabled:true,
+           reason:"dry run first — CONFIRM=1 is a separate press"}
+ };
 }
 
-/* ==========================================================================
+/* ===========================================================================
    RENDER HELPERS
-   ========================================================================== */
-const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+   =========================================================================== */
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function laneColor(i){const c=S.ace_instance_0.slots[i].color;
+ return(!Array.isArray(c)||(c[0]===0&&c[1]===0&&c[2]===0))?"var(--divider)":"rgb("+c.join(",")+")";}
+function swatch(i){const c=S.ace_instance_0.slots[i].color;
+ return(!Array.isArray(c)||(c[0]===0&&c[1]===0&&c[2]===0))
+  ?'<span class="sw absent"></span>'
+  :'<span class="sw" style="background:rgb('+c.join(",")+')"></span>';}
+function laneName(i){return S.mmu.gate_filament_name[i]||S.ace_instance_0.slots[i].material||"—";}
+function laneMeta(i){const m=S.mmu,s=S.ace_instance_0.slots[i],b=[];
+ const mat=m.gate_material[i]||s.material; if(mat)b.push(mat);
+ if(m.gate_spool_id[i]>=0)b.push("spool "+m.gate_spool_id[i]);
+ if(s.total)b.push(s.total+" g"); if(s.rfid)b.push("tag");
+ return b.length?b.join(" · "):"—";}
 
-function swatch(rgb, cls) {
-  const absent = !Array.isArray(rgb) || (rgb[0] === 0 && rgb[1] === 0 && rgb[2] === 0);
-  if (absent) return '<span class="sw absent ' + (cls||"") + '"></span>';
-  return '<span class="sw ' + (cls||"") + '" style="background:rgb(' + rgb.join(",") + ')"></span>';
+function ctl(c,cls){
+ const k=["btn",c.rank==="primary"?"primary":(c.rank==="destructive"?"destructive":""),cls||""].join(" ").trim();
+ const dis=c.enabled?"":' aria-disabled="true" tabindex="-1"';
+ const reason=!c.enabled?c.reason:(c.caution||c.hint||c.reason||"");
+ const style=(c.enabled&&c.caution)?' style="color:var(--staged)"':"";
+ return '<div class="ctl"><span class="'+k+'"'+dis+' data-gcode="'+esc(c.gcode)+'" role="button">'+
+   esc(c.label)+'</span>'+
+   (reason?'<span class="t-reason"'+style+'>'+esc(reason)+'</span>':"")+'</div>';
 }
-function laneColor(i) {
-  const c = S.ace_instance_0.slots[i].color;
-  const absent = !Array.isArray(c) || (c[0]===0 && c[1]===0 && c[2]===0);
-  return absent ? "var(--divider)" : "rgb(" + c.join(",") + ")";
+function chip(c){
+ const dis=c.enabled?"":' aria-disabled="true" tabindex="-1"';
+ return '<span class="btn xs'+(c.enabled?"":"")+'"'+dis+' data-gcode="'+esc(c.gcode)+'" role="button" title="'+
+   esc(c.enabled?(c.hint||""):c.reason)+'">'+esc(c.label)+'</span>';
 }
+function pill(t,k){const g=k==="unknown"?"<i>?</i>":"<i></i>";
+ return '<span class="pill '+(k||"")+'">'+g+esc(t)+'</span>';}
+function hhmm(s){if(!s)return"—";const h=Math.floor(s/3600),m=Math.floor(s%3600/60);
+ return h?h+" h "+m+" m":m+" m";}
+function absHum(t,rh){if(t==null||rh==null)return null;
+ const svp=6.112*Math.exp((17.67*t)/(t+243.5));return(2.1674*(rh/100)*svp*100)/(273.15+t);}
 
-/* a control renders as button + reason; the gcode always lives in data-gcode */
-function ctl(c, extraClass) {
-  const cls = ["btn", c.rank === "primary" ? "primary" : (c.rank === "destructive" ? "destructive" : ""),
-               extraClass || ""].join(" ").trim();
-  const dis = c.enabled ? "" : ' aria-disabled="true" tabindex="-1"';
-  const reason = !c.enabled ? c.reason : (c.caution || c.reason || "");
-  const rcls = (!c.enabled || !c.caution) ? "t-reason" : "t-reason";
-  return '<div class="ctl">' +
-    '<span class="' + cls + '"' + dis + ' data-gcode="' + esc(c.gcode) + '" role="button">' +
-      esc(c.label) + '</span>' +
-    (reason ? '<span class="' + rcls + '"' + (c.caution && c.enabled ? ' style="color:var(--staged)"' : "") + '>' + esc(reason) + '</span>' : "") +
-    '</div>';
-}
+/* ---------------------------------------------------------------------------
+   THE LADDER — the display requirement, drawn to true scale.
+   Confidence tiers: measured / reckoned (band) / inferred (hatch) / unknown.
+   --------------------------------------------------------------------------- */
+function ladder(i,P,W,H,detail){
+ const t=tip(i,P), col=laneColor(i), x=v=>8+(W-16)*(v/P.TOTAL);
+ const y=Math.round(H*0.52), g=[];
+ g.push('<defs><pattern id="hx'+i+'" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">'+
+        '<line x1="0" y="0" x2="0" y2="6" stroke="var(--unknown)" stroke-width="2.5"/></pattern></defs>');
+ g.push('<line x1="'+x(0)+'" y1="'+y+'" x2="'+x(P.TOTAL)+'" y2="'+y+'" stroke="var(--track)" stroke-width="8" stroke-linecap="round"/>');
 
-function pill(text, kind, glyph) {
-  const g = kind === "unknown" ? '<i>?</i>' : (glyph === false ? "" : "<i></i>");
-  return '<span class="pill ' + (kind||"") + '">' + g + esc(text) + '</span>';
-}
-
-function absHumidity(t, rh) {
-  if (t == null || rh == null) return null;
-  const svp = 6.112 * Math.exp((17.67 * t) / (t + 243.5));
-  return (2.1674 * (rh / 100) * svp * 100) / (273.15 + t);
-}
-function hhmm(s) {
-  if (!s) return "—";
-  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
-  return h ? h + " h " + m + " m" : m + " m";
-}
-
-/* --- lane descriptors, derived (never from filament_pos_per_gate) --------- */
-function laneState(i, P) {
-  if (P.PRESENT[i] === null)                    return { key:"unknown", badge:"UNKNOWN", ink:"var(--unknown)" };
-  if (P.JAM && P.JAM_TOOL === i)                return { key:"fault",   badge:"JAM",     ink:"var(--fault)" };
-  if (P.CUR === i)                              return { key:"loaded",  badge:"LOADED",  ink:"var(--ok)" };
-  if (!P.PATH_FREE && P.TGT === i)              return { key:"busy",    badge:"MOVING",  ink:"var(--busy)" };
-  if (P.PRESENT[i] === false)                   return { key:"empty",   badge:"EMPTY",   ink:"var(--text-faint)" };
-  if (P.STAGED[i])                              return { key:"staged",  badge:"STAGED",  ink:"var(--staged)" };
-  return { key:"gate", badge:"AT GATE", ink:"var(--text-dim)" };
-}
-function laneName(i) {
-  const m = S.mmu, sl = S.ace_instance_0.slots[i];
-  return m.gate_filament_name[i] || sl.material || "—";
-}
-function laneMeta(i) {
-  const m = S.mmu, sl = S.ace_instance_0.slots[i], bits = [];
-  const mat = m.gate_material[i] || sl.material;
-  if (mat) bits.push(mat);
-  if (m.gate_spool_id[i] >= 0) bits.push("spool " + m.gate_spool_id[i]);
-  if (sl.total) bits.push(sl.total + " g");
-  if (sl.sku) bits.push(sl.sku);
-  return bits.length ? bits.join(" · ") : "—";
-}
-
-/* ==========================================================================
-   2.2 PATH DIAGRAM
-   ========================================================================== */
-function pathSvg(P, mode) {
-  const sv = S.save_variables.variables;
-  const cal = sv.ace_cal_hub_to_entry > 0;
-  const entryS = S["filament_switch_sensor toolhead_entry"];
-  const postS  = S["filament_switch_sensor toolhead_postgear"];
-  const hubS   = S["filament_switch_sensor hub_detect"];
-  const g = [];
-
-  const dot = (x, y, on, off, bad, label, val) => {
-    const stroke = bad ? "var(--fault)" : off ? "var(--unknown)" : on ? "var(--ok)" : "var(--border)";
-    const fill   = bad ? "var(--fault)" : on && !off ? "var(--ok)" : "none";
-    return '<circle cx="' + x + '" cy="' + y + '" r="7" fill="' + fill + '" stroke="' + stroke + '" stroke-width="2"/>' +
-      (off ? '<line x1="' + (x-7) + '" y1="' + (y+7) + '" x2="' + (x+7) + '" y2="' + (y-7) +
-             '" stroke="var(--unknown)" stroke-width="2"/>' : "") +
-      '<text x="' + x + '" y="' + (y+26) + '" fill="var(--text-faint)" font-size="11" font-weight="650" ' +
-        'letter-spacing="1.2" text-anchor="middle">' + label + '</text>' +
-      (val ? '<text x="' + x + '" y="' + (y-16) + '" fill="var(--text-dim)" font-size="10.5" ' +
-             'text-anchor="middle">' + val + '</text>' : "");
-  };
-
-  if (mode === "vertical") {
-    /* phone: four stubs across the top, shared run downward */
-    const LX = [40,100,160,220], TOP = 26, MID = 74, HUB = [130,104], BOT = 254;
-    for (let i = 0; i < 4; i++) {
-      const x = LX[i];
-      g.push('<path d="M' + x + ' ' + TOP + ' V' + MID + ' Q' + x + ' ' + (MID+18) + ' ' +
-             HUB[0] + ' ' + HUB[1] + '" fill="none" stroke="var(--surface-3)" stroke-width="7" stroke-linecap="round"/>');
-      const f = cal ? Math.max(0, Math.min(1, (sv.ace_staged_mm[i]||0) / P.TUBE[i])) : 0;
-      if (P.PRESENT[i] === null) {
-        g.push('<path d="M' + x + ' ' + TOP + ' V' + MID + '" fill="none" stroke="var(--unknown)" ' +
-               'stroke-width="7" stroke-linecap="round" stroke-dasharray="3 4"/>');
-      } else if (P.PRESENT[i] && f >= 0.999) {
-        g.push('<path d="M' + x + ' ' + TOP + ' V' + MID + ' Q' + x + ' ' + (MID+18) + ' ' +
-               HUB[0] + ' ' + HUB[1] + '" fill="none" stroke="' + laneColor(i) + '" stroke-width="7" stroke-linecap="round"/>');
-      } else if (P.PRESENT[i]) {
-        const endY = TOP + (MID - TOP) * Math.max(f, 0.14);
-        g.push('<path d="M' + x + ' ' + TOP + ' V' + endY + '" fill="none" stroke="' + laneColor(i) +
-               '" stroke-width="7" stroke-linecap="round"/>');
-      }
-      g.push('<text x="' + x + '" y="' + (TOP-10) + '" fill="var(--text-faint)" font-size="11" ' +
-             'font-weight="650" text-anchor="middle">T' + i + '</text>');
-    }
-    g.push('<path d="M' + HUB[0] + ' ' + HUB[1] + ' V' + BOT + '" fill="none" stroke="var(--surface-3)" stroke-width="9" stroke-linecap="round"/>');
-    const YE = HUB[1] + (BOT - HUB[1]) * 0.55, YG = HUB[1] + (BOT - HUB[1]) * 0.78;
-    let tipY = null;
-    if (!P.IMPOSSIBLE) {
-      if (S.mmu.in_melt_zone) tipY = BOT;
-      else if (P.POST) tipY = YG;
-      else if (P.ENTRY) tipY = YE;
-      else if (P.HUB) tipY = HUB[1] + 22;
-    }
-    if (tipY) {
-      const col = P.OWNER >= 0 ? laneColor(P.OWNER) : "var(--unknown)";
-      g.push('<path d="M' + HUB[0] + ' ' + HUB[1] + ' V' + tipY + '" fill="none" stroke="' + col + '" stroke-width="9" stroke-linecap="round"/>');
-    }
-    const sdot = (y, on, off, bad, label) =>
-      '<circle cx="' + HUB[0] + '" cy="' + y + '" r="7" fill="' + (bad?"var(--fault)":(on&&!off?"var(--ok)":"none")) +
-      '" stroke="' + (bad?"var(--fault)":off?"var(--unknown)":on?"var(--ok)":"var(--border)") + '" stroke-width="2"/>' +
-      (off ? '<line x1="' + (HUB[0]-7) + '" y1="' + (y+7) + '" x2="' + (HUB[0]+7) + '" y2="' + (y-7) +
-             '" stroke="var(--unknown)" stroke-width="2"/>' : "") +
-      '<text x="' + (HUB[0]+16) + '" y="' + (y+4) + '" fill="var(--text-faint)" font-size="11" font-weight="650" letter-spacing="1.1">' + label + '</text>';
-    g.push(sdot(HUB[1], P.HUB, !hubS.enabled, false, "HUB"));
-    g.push(sdot(YE, P.ENTRY, !entryS.enabled, P.IMPOSSIBLE, "ENTRY"));
-    g.push(sdot(YG, P.POST, !postS.enabled, P.IMPOSSIBLE, "GEARS"));
-    g.push(sdot(BOT, S.mmu.in_melt_zone, false, false, "MELT"));
-    return '<svg viewBox="0 0 300 280" width="100%" height="280" role="img" aria-label="filament path">' + g.join("") + '</svg>';
-  }
-
-  /* desktop: horizontal, lanes converging on the hub */
-  const LY = [50,95,185,230], HUBX = 420, HUBY = 140, OUT = 860, X0 = 56, XB = 330;
-  for (let i = 0; i < 4; i++) {
-    const y = LY[i];
-    const d = 'M' + X0 + ' ' + y + ' H' + XB + ' Q' + (XB+60) + ' ' + y + ' ' + HUBX + ' ' + HUBY;
-    g.push('<path d="' + d + '" fill="none" stroke="var(--surface-3)" stroke-width="8" stroke-linecap="round"/>');
-    const f = cal ? Math.max(0, Math.min(1, (sv.ace_staged_mm[i]||0) / P.TUBE[i])) : 0;
-    if (P.PRESENT[i] === null) {
-      g.push('<path d="M' + X0 + ' ' + y + ' H' + XB + '" fill="none" stroke="var(--unknown)" ' +
-             'stroke-width="8" stroke-linecap="round" stroke-dasharray="4 5"/>');
-      g.push('<text x="' + (XB+14) + '" y="' + (y+4) + '" fill="var(--unknown)" font-size="12">?</text>');
-    } else if (P.PRESENT[i] && f >= 0.999) {
-      g.push('<path d="' + d + '" fill="none" stroke="' + laneColor(i) + '" stroke-width="8" stroke-linecap="round"/>');
-    } else if (P.PRESENT[i]) {
-      const endX = X0 + (XB - X0) * Math.max(f, 0.06);
-      g.push('<path d="M' + X0 + ' ' + y + ' H' + endX + '" fill="none" stroke="' + laneColor(i) +
-             '" stroke-width="8" stroke-linecap="round"/>');
-      if (f > 0.02) g.push('<circle cx="' + endX + '" cy="' + y + '" r="5" fill="' + laneColor(i) + '"/>');
-    }
-    g.push('<text x="24" y="' + (y+4) + '" fill="var(--text-faint)" font-size="12" font-weight="650">T' + i + '</text>');
-    const mm = sv.ace_staged_mm[i] || 0;
-    if (P.PRESENT[i] && mm > 0) {
-      g.push('<text x="' + (X0+6) + '" y="' + (y-13) + '" fill="var(--text-dim)" font-size="10.5">' +
-             Math.round(mm) + ' / ' + Math.round(P.TUBE[i]) + ' mm</text>');
-    }
-  }
-  g.push('<path d="M' + HUBX + ' ' + HUBY + ' H' + OUT + '" fill="none" stroke="var(--surface-3)" stroke-width="10" stroke-linecap="round"/>');
-  const XE = HUBX + (OUT - HUBX) * 0.60, XG = HUBX + (OUT - HUBX) * 0.80;
-  let tipX = null;
-  if (!P.IMPOSSIBLE) {
-    if (S.mmu.in_melt_zone) tipX = OUT;
-    else if (P.POST) tipX = XG;
-    else if (P.ENTRY) tipX = XE;
-    else if (P.HUB) tipX = HUBX + 40;
-  }
-  if (tipX) {
-    const col = P.OWNER >= 0 ? laneColor(P.OWNER) : "var(--unknown)";
-    g.push('<path d="M' + HUBX + ' ' + HUBY + ' H' + tipX + '" fill="none" stroke="' + col + '" stroke-width="10" stroke-linecap="round"/>');
-  }
-  if (S.ace_hub_encoder.moving) {
-    g.push('<path d="M' + (HUBX+26) + ' ' + (HUBY-20) + ' l8 6 l-8 6" fill="none" stroke="var(--busy)" stroke-width="2.5" stroke-linecap="round"/>');
-    g.push('<text x="' + (HUBX+42) + '" y="' + (HUBY-13) + '" fill="var(--busy)" font-size="10.5" font-weight="650">encoder turning</text>');
-  }
-  g.push(dot(HUBX, HUBY, P.HUB, !hubS.enabled, false, "HUB", hubS.enabled ? hubS.reading.toFixed(1) : "off"));
-  g.push(dot(XE, HUBY, P.ENTRY, !entryS.enabled, P.IMPOSSIBLE, "ENTRY", entryS.enabled ? null : "sensor off"));
-  g.push(dot(XG, HUBY, P.POST, !postS.enabled, P.IMPOSSIBLE, "GEARS", null));
-  g.push(dot(OUT, HUBY, S.mmu.in_melt_zone, false, false, "MELT", "derived"));
-  return '<svg viewBox="0 0 900 280" width="100%" height="220" role="img" aria-label="filament path">' + g.join("") + '</svg>';
+ if(t.tier==="unknown"){
+   g.push('<line x1="'+x(0)+'" y1="'+y+'" x2="'+x(P.TOTAL)+'" y2="'+y+'" stroke="url(#hx'+i+')" stroke-width="8" stroke-linecap="round" opacity=".75"/>');
+ } else if(t.tier==="inferred"){
+   g.push('<line x1="'+x(0)+'" y1="'+y+'" x2="'+x(t.from)+'" y2="'+y+'" stroke="'+col+'" stroke-width="8" stroke-linecap="round"/>');
+   g.push('<line x1="'+x(t.from)+'" y1="'+y+'" x2="'+x(t.to)+'" y2="'+y+'" stroke="url(#hx'+i+')" stroke-width="8" stroke-linecap="round" opacity=".8"/>');
+ } else if(t.tier!=="empty"&&t.mm>0){
+   const lo=Math.max(0,t.mm-(t.tol||0)), hi=Math.min(P.TOTAL,t.mm+(t.tol||0));
+   g.push('<line x1="'+x(0)+'" y1="'+y+'" x2="'+x(lo)+'" y2="'+y+'" stroke="'+col+'" stroke-width="8" stroke-linecap="round"/>');
+   if(t.tol){ /* the +/- band: the claim the sensors actually support */
+     g.push('<line x1="'+x(lo)+'" y1="'+y+'" x2="'+x(hi)+'" y2="'+y+'" stroke="'+col+'" stroke-width="8" opacity=".45"/>');
+   } else {
+     g.push('<circle cx="'+x(t.mm)+'" cy="'+y+'" r="5" fill="'+col+'"/>');
+   }
+ }
+ /* landmarks */
+ const marks=[["edge",P.MARK.edge,true,true],
+              ["hub",P.MARK.hub,P.HUB,P.HU_OK],
+              ["entry",P.MARK.entry,P.ENTRY,P.EN_OK],
+              ["gears",P.MARK.gears,P.POST,P.PO_OK],
+              ["melt",P.MARK.melt,S.mmu.in_melt_zone,true]];
+ marks.forEach(function(m,k){
+   const bad=P.IMPOSSIBLE&&(m[0]==="entry"||m[0]==="gears");
+   const stroke=bad?"var(--fault)":!m[3]?"var(--unknown)":m[2]?"var(--ok)":"var(--border)";
+   const fill=bad?"var(--fault)":(m[2]&&m[3])?"var(--ok)":"var(--bg)";
+   g.push('<circle cx="'+x(m[1])+'" cy="'+y+'" r="5.5" fill="'+fill+'" stroke="'+stroke+'" stroke-width="2"/>');
+   if(!m[3]) g.push('<line x1="'+(x(m[1])-6)+'" y1="'+(y+6)+'" x2="'+(x(m[1])+6)+'" y2="'+(y-6)+'" stroke="var(--unknown)" stroke-width="2"/>');
+   if(detail||k===0||k===1||k===4){
+     const lx=k===0?x(m[1]):(k===4?x(m[1]):x(m[1]));
+     const anch=k===0?"start":(k===4?"end":"middle");
+     g.push('<text x="'+lx+'" y="'+(y+18)+'" fill="var(--text-faint)" font-size="9.5" font-weight="650" '+
+            'letter-spacing="1" text-anchor="'+anch+'">'+m[0].toUpperCase()+'</text>');
+   }
+ });
+ if(!detail){
+   const mid=(x(P.MARK.entry)+x(P.MARK.melt))/2;
+   g.push('<text x="'+mid+'" y="'+(y-12)+'" fill="var(--text-faint)" font-size="9" font-weight="650" '+
+          'letter-spacing="1" text-anchor="middle">TOOLHEAD</text>');
+ }
+ return '<svg viewBox="0 0 '+W+' '+H+'" width="100%" height="'+H+'" role="img" aria-label="T'+i+' tip position">'+g.join("")+'</svg>';
 }
 
-/* ==========================================================================
-   BANNERS
-   ========================================================================== */
-function banners(P, G) {
-  const out = [];
-  if (P.IMPOSSIBLE) {
-    out.push('<div class="banner"><div class="t-micro h">Sensor fault</div>' +
-      '<div class="t-strong" style="margin-top:4px">Post-gear sees filament but entry does not.</div>' +
-      '<div class="t-meta" style="margin-top:2px">That is impossible on a continuous strand: broken filament, or one of the two switches has failed.</div>' +
-      '<div class="t-meta mono" style="margin-top:4px">entry=0 · post-gear=1 · hub=' + (P.HUB?1:0) + ' · both switches enabled</div>' +
-      '<div class="acts">' + ctl(G.audit) + ctl(G.query) + ctl(G.clearop) + '</div></div>');
-  }
-  if (P.JAM) {
-    out.push('<div class="banner"><div class="t-micro h">Jam latched on T' + P.JAM_TOOL + '</div>' +
-      '<div class="t-strong" style="margin-top:4px">The buffer stopped moving while T' + P.JAM_TOOL + ' was feeding.</div>' +
-      '<div class="t-meta" style="margin-top:2px">Motion is <em>not</em> blocked — nothing in the config gates on this flag, and buffer-watch gating around unload was tried and removed on 2026-08-20.</div>' +
-      '<div class="t-meta mono" style="margin-top:4px">jam_tool=' + P.JAM_TOOL + ' · last_event="' +
-        esc(S.ace_buffer_watch.last_event) + '" · off-rest ' + S.ace_buffer_watch.offrest_seconds + ' s</div>' +
-      '<div class="acts">' + ctl(G.jamclr) + ctl(G.audit) +
-        ctl(laneControls(P.JAM_TOOL, P).eject) + '</div></div>');
-  }
-  if (!P.NO_OP) {
-    out.push('<div class="banner"><div class="t-micro h">Open intent</div>' +
-      '<div class="t-strong" style="margin-top:4px">' + esc(P.OP) + '</div>' +
-      '<div class="t-meta" style="margin-top:2px">An operation was recorded and never committed. The state is indeterminate — recover before moving filament.</div>' +
-      '<div class="acts">' + ctl(G.audit) + ctl(G.recover) + ctl(G.clearop) + '</div></div>');
-  }
-  return out.join("");
+function tipLine(i,P){
+ const t=tip(i,P);
+ const ink=t.tier==="unknown"?"var(--unknown)":t.tier==="inferred"?"var(--unknown)":
+           t.tier==="measured"?"var(--ok)":t.tier==="reckoned"?"var(--staged)":"var(--text-faint)";
+ return '<span class="t-meta" style="color:'+ink+'">'+esc(t.label)+'</span>';
 }
 
-/* ==========================================================================
-   ARTBOARD 1 — DESKTOP
-   ========================================================================== */
-function renderDesktop() {
-  const P = pred(S), G = globalControls(P), sv = S.save_variables.variables;
-  const ace = S.ace_instance_0, dry = ace.dryer_status;
-  const unit = S.mmu_machine.unit_0;
+/* ===========================================================================
+   BANNERS + RAIL
+   =========================================================================== */
+function banners(P,G){
+ const out=[];
+ if(P.DRY_FAULT){
+  out.push('<div class="banner"><div class="t-micro" style="color:var(--fault)">Dryer fault</div>'+
+   '<div class="t-strong" style="margin-top:3px">Dryer reports '+esc(S.ace_instance_0.dryer_status.state_detail)+'.</div>'+
+   '<div class="t-meta">Heating has stopped and the humidity hold has been cancelled.</div>'+
+   '<div class="acts">'+ctl(G.drystop)+ctl(G.audit)+'</div></div>');}
+ if(P.IMPOSSIBLE){
+  out.push('<div class="banner"><div class="t-micro" style="color:var(--fault)">Sensor fault</div>'+
+   '<div class="t-strong" style="margin-top:3px">Post-gear sees filament but entry does not.</div>'+
+   '<div class="t-meta">Impossible on a continuous strand: broken filament, or a dead switch.</div>'+
+   '<div class="t-meta mono">entry=0 · post-gear=1 · hub='+(P.HUB?1:0)+' · both enabled</div>'+
+   '<div class="acts">'+ctl(G.audit)+ctl(G.query)+ctl(G.clearop)+'</div></div>');}
+ if(P.JAM){
+  out.push('<div class="banner"><div class="t-micro" style="color:var(--fault)">Jam latched on T'+P.JAM_TOOL+'</div>'+
+   '<div class="t-strong" style="margin-top:3px">The buffer stopped moving while T'+P.JAM_TOOL+' was feeding.</div>'+
+   '<div class="t-meta">Motion is <em>not</em> blocked — nothing in the config gates on this flag.</div>'+
+   '<div class="t-meta mono">jam_tool='+P.JAM_TOOL+' · last_event="'+esc(S.ace_buffer_watch.last_event)+
+     '" · off-rest '+S.ace_buffer_watch.offrest_seconds+' s</div>'+
+   '<div class="acts">'+ctl(G.jamclr)+ctl(G.audit)+ctl(laneControls(P.JAM_TOOL,P).eject)+'</div></div>');}
+ if(!P.NO_OP){
+  out.push('<div class="banner"><div class="t-micro" style="color:var(--fault)">Open intent</div>'+
+   '<div class="t-strong" style="margin-top:3px">'+esc(P.OP)+'</div>'+
+   '<div class="t-meta">Recorded and never committed — the state is indeterminate. Recover before moving filament.</div>'+
+   '<div class="acts">'+ctl(G.audit)+ctl(G.recover)+ctl(G.unlock)+ctl(G.recon)+ctl(G.clearop)+ctl(G.supp)+'</div></div>');}
+ if(P.AT_TOOLHEAD&&P.CUR===-1&&P.NO_OP){
+  out.push('<div class="banner"><div class="t-micro" style="color:var(--fault)">Orphaned strand</div>'+
+   '<div class="t-strong" style="margin-top:3px">Filament at the toolhead that no lane claims.</div>'+
+   '<div class="t-meta">Neither actuator owns it. Confirm by eye whose strand it is before forcing anything.</div>'+
+   '<div class="acts">'+ctl(G.audit)+ctl(G.recover)+ctl(laneControls(2,P).eject)+'</div></div>');}
+ return out.join("");
+}
 
-  const connPill = P.CONNECTED ? pill("connected", "ok") : pill("disconnected", "fault");
-  const pathPill = !P.PATH_FREE
-      ? pill("path busy" + (P.OWNER >= 0 ? " · T" + P.OWNER : ""), "busy")
-      : pill("path clear", "ok");
-  const auditPill = !P.AUDIT_RUN ? pill("audit not run yet", "unknown")
-      : (P.AUDIT_OK ? pill("coherent · " + S["gcode_macro ACE_AUDIT"].toolhead.toLowerCase(), "ok")
-                    : pill("not coherent", "fault"));
-  const jobPill = P.PRINTING ? pill(S.print_stats.state + " · " + S.print_stats.filename, "busy", false)
-                             : pill(S.print_stats.state, "", false);
-  const tgtPill = P.TGT !== -1 ? pill("toolchange T" + P.CUR + "→T" + P.TGT + " in flight", "busy") : "";
-  const opPill  = !P.NO_OP ? pill("open intent", "fault") : "";
-  const stalePill = !P.FRESH ? pill("lane sensors stale", "unknown") : "";
+function railHtml(P){
+ const items=S._rail||[]; if(!items.length) return "";
+ return '<div class="rail">'+items.map(function(it){
+  const c={label:it.cmd,gcode:it.cmd,rank:"primary",enabled:true,reason:""};
+  return '<div class="rail-item'+(it.err?" err":"")+'" style="padding-left:12px">'+
+    '<span class="btn sm primary" data-gcode="'+esc(it.cmd)+'" role="button">'+esc(it.cmd)+'</span>'+
+    '<span class="msg t-meta">'+esc(it.msg)+'</span>'+
+    '<span class="t-reason">'+esc(it.age)+'</span></div>';
+ }).join("")+'</div>';
+}
 
-  const abs = absHumidity(ace.temp, ace.humidity);
-  const dryLine = P.DRYING
-    ? dry.status + " " + dry.target_temp + " °C · " + hhmm(dry.remain_time) + " left"
-    : (P.AUTODRY ? "idle · auto-dry holding " + S["gcode_macro ACE_AUTODRY"].target_rh + " %RH" : "idle");
+/* ===========================================================================
+   DRYER STRIP
+   =========================================================================== */
+function dryerStrip(P,G,compact){
+ const a=S.ace_instance_0, d=a.dryer_status, A=S["gcode_macro ACE_AUTODRY"];
+ let mode,figure,frac,fnote;
+ if(P.DRY_FAULT){ mode="FAULT · "+d.state_detail; figure="—"; frac=0; fnote="heating stopped"; }
+ else if(d.status!=="stop"){ mode="one-shot · "+d.target_temp+" °C"; figure=hhmm(d.remain_time);
+   frac=d.duration?1-(d.remain_time/d.duration):0; fnote="remaining"; }
+ else if(P.AUTODRY){ mode="auto-dry · hold ≤ "+A.target_rh+" %";
+   figure=a.humidity+" %"; frac=Math.max(0,Math.min(1,A.target_rh/Math.max(a.humidity,1)));
+   fnote=(a.humidity>A.target_rh? (a.humidity-A.target_rh)+" % above target":"at target"); }
+ else { mode="idle"; figure=a.humidity+" %"; frac=0; fnote="not drying"; }
 
-  let html = '<div class="d-grid">';
+ const disagree=P.AUTODRY!==P.AUTODRY_ARMED;
+ const presets=S["gcode_macro _ACE_DRY_PRESETS"].table;
+ const chipsHtml=Object.keys(presets).map(function(k){
+   return chip({label:k,gcode:"ACE_DRY MATERIAL="+k,enabled:G.dry.enabled,
+     reason:G.dry.reason,hint:presets[k].temp+" °C · "+presets[k].min+" min"});}).join("");
 
-  /* header */
-  html += '<div class="card d-header">' +
-    '<div class="d-hrow">' +
-      '<span class="t-title">' + esc(unit.name) + '</span>' +
-      '<span class="t-meta">' + esc(unit.vendor) + " · " + esc(unit.version) + '</span>' +
-      connPill + pathPill + auditPill + jobPill + tgtPill + opPill + stalePill +
-      '<span style="flex:1"></span>' +
-      '<div style="width:150px">' + ctl(G.stop) + '</div>' +
-    '</div>' +
-    '<div class="d-hrow b">' +
-      '<span class="t-micro" style="width:52px">Dryer</span>' +
-      '<span class="t-measure">' + ace.temp + '</span><span class="t-unit">°C</span>' +
-      '<span class="t-measure">' + ace.humidity + '</span><span class="t-unit">%RH</span>' +
-      '<span class="t-measure">' + (abs ? abs.toFixed(1) : "—") + '</span><span class="t-unit">g/m³</span>' +
-      '<span class="t-meta">' + esc(dryLine) + '</span>' +
-      '<span style="flex:1"></span>' +
-      '<div style="width:150px">' + ctl(P.DRYING || P.AUTODRY ? G.drystop : G.dry) + '</div>' +
-      '<div style="width:150px">' + ctl(G.autodry) + '</div>' +
-      '<div style="width:120px">' + ctl(G.roll) + '</div>' +
-    '</div>' +
+ return '<div class="card" style="padding:8px 12px">'+
+  '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'+
+   '<span class="t-micro" style="width:44px">Dryer</span>'+
+   '<span class="t-strong" style="color:'+(P.DRY_FAULT?"var(--fault)":P.AUTODRY?"var(--ok)":"var(--text-dim)")+'">'+esc(mode)+'</span>'+
+   '<span class="t-m">'+esc(figure)+'</span><span class="t-unit">'+esc(fnote)+'</span>'+
+   '<span class="t-meta">'+a.temp+' °C</span>'+
+   (compact?"":'<span class="t-meta">'+(absHum(a.temp,a.humidity)||0).toFixed(1)+' g/m³ abs</span>')+
+   '<span style="flex:1"></span>'+
+   (P.DRYING||P.AUTODRY?'<span class="btn sm destructive" data-gcode="ACE_DRY_OFF" role="button">Stop</span>'
+     :'<span class="btn sm'+(G.autodry.enabled?"":"")+'"'+(G.autodry.enabled?"":' aria-disabled="true" tabindex="-1"')+
+      ' data-gcode="ACE_AUTODRY MATERIAL=PLA" role="button">Auto-dry</span>')+
+   (compact?'<a class="btn door" href="#page-dryer" data-door="dryer" title="dryer detail on the page">⟶</a>':"")+
+  '</div>'+
+  '<div class="prog" style="margin-top:6px"><span style="width:'+(frac*100).toFixed(0)+'%;background:'+
+    (P.DRY_FAULT?"var(--fault)":"var(--ok)")+'"></span></div>'+
+  (disagree?'<div class="t-reason" style="color:var(--staged);margin-top:4px">auto-dry was armed but is not running — a Klipper restart drops the hold</div>':"")+
+  (compact?"":'<div class="chips" style="margin-top:8px">'+chipsHtml+'</div>'+
+    '<div class="t-reason" style="margin-top:4px">presets read live from _ACE_DRY_PRESETS · no free-text temperature: 55 °C is what is proven</div>')+
+ '</div>';
+}
+
+/* ===========================================================================
+   ARTBOARD 1 — DASHBOARD CARD (600 x 400)
+   =========================================================================== */
+function renderCard(){
+ const P=pred(S), G=globals(P);
+ let h='<div class="card" style="padding:0 10px;display:flex;align-items:center;gap:8px;height:40px;flex:none">'+
+   '<span class="t-tile">ACE 2 Pro</span>'+
+   (P.CONNECTED?pill("conn","ok"):pill("down","fault"))+
+   (!P.AUDIT_RUN?pill("audit not run","unknown"):(P.AUDIT_OK?pill("coherent","ok"):pill("not coherent","fault")))+
+   (P.PATH_FREE?pill("path clear","ok"):pill("path busy","busy"))+
+   (!P.FRESH?pill("stale","unknown"):"")+
+   '<span style="flex:1"></span>'+
+   '<span class="btn sm destructive" data-gcode="ACE_STOP_ALL" role="button">STOP ALL</span>'+
+ '</div>';
+
+ const b=banners(P,G);
+ if(b) h+='<div style="flex:none;max-height:118px;overflow:auto">'+b+'</div>';
+ const r=railHtml(P);
+ if(r) h+='<div style="flex:none">'+r+'</div>';
+
+ h+='<div style="flex:1;display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:minmax(0,1fr);gap:8px;min-height:0">';
+ for(let i=0;i<4;i++){
+  const C=laneControls(i,P), st=tip(i,P);
+  const cls=["tile",P.PRESENT[i]===false?"empty":"",P.CUR===i?"loaded":"",
+             (P.JAM&&P.JAM_TOOL===i)?"fault":""].join(" ");
+  h+='<div class="'+cls+'" style="padding:6px 8px 6px 10px">'+
+   '<span class="rule" style="background:'+((P.JAM&&P.JAM_TOOL===i)?"var(--fault)":
+      P.PRESENT[i]===null?"var(--unknown)":laneColor(i))+'"></span>'+
+   '<div class="thead">'+swatch(i)+'<span class="t-tile" style="font-size:13px">T'+i+'</span>'+
+     '<span class="grow t-meta">'+esc(laneName(i))+'</span>'+
+     '<a class="btn door" href="#lane'+i+'" data-door="lane'+i+'" title="open this lane on the page">⟶</a></div>'+
+   ladder(i,P,268,34,false)+
+   '<div style="margin-top:2px">'+tipLine(i,P)+'</div>'+
+   '<div style="display:flex;gap:6px;margin-top:auto">'+
+     '<span class="btn sm'+(C.load.enabled?" primary":"")+'"'+(C.load.enabled?"":' aria-disabled="true" tabindex="-1"')+
+       ' data-gcode="'+esc(C.load.gcode)+'" role="button" title="'+esc(C.load.reason)+'">'+esc(C.load.label)+'</span>'+
+     '<span class="btn sm"'+(C.mid.enabled?"":' aria-disabled="true" tabindex="-1"')+
+       ' data-gcode="'+esc(C.mid.gcode)+'" role="button" title="'+esc(C.mid.reason)+'">'+esc(C.mid.label.split(" ")[0])+'</span>'+
+     '<span class="btn sm destructive"'+(C.eject.enabled?"":' aria-disabled="true" tabindex="-1"')+
+       ' data-gcode="'+esc(C.eject.gcode)+'" role="button" title="'+esc(C.eject.reason||C.eject.caution)+'">'+
+       esc(C.eject.label.replace(" (force)","!"))+'</span>'+
+   '</div>'+
+   '<div class="t-reason" style="height:15px;overflow:hidden">'+
+     esc(!C.load.enabled?C.load.reason:(C.eject.caution||""))+'</div>'+
   '</div>';
-
-  const b = banners(P, G);
-  if (b) html += '<div class="d-banner" style="display:flex;flex-direction:column;gap:16px">' + b + '</div>';
-
-  /* path */
-  const cal = sv.ace_cal_hub_to_entry > 0;
-  html += '<div class="card d-path">' +
-    '<div class="t-micro">Path</div>' +
-    '<div style="margin-top:10px">' + pathSvg(P, "horizontal") + '</div>' +
-    '<div style="display:flex;align-items:center;gap:12px;margin-top:10px">' +
-      '<span class="t-meta">' + (cal
-        ? "hub → entry " + sv.ace_cal_hub_to_entry.toFixed(1) + " mm measured · lane tubes " +
-          P.TUBE[0].toFixed(0) + " mm · calibrated " + esc(sv.ace_cal_when)
-        : "lane lengths are not to scale — the path is not calibrated") + '</span>' +
-      '<span style="flex:1"></span>' +
-      (cal ? "" : '<div style="width:170px">' + ctl(G.cal) + '</div>') +
-    '</div>' +
-  '</div>';
-
-  /* toolhead */
-  const entryS = S["filament_switch_sensor toolhead_entry"], postS = S["filament_switch_sensor toolhead_postgear"],
-        hubS = S["filament_switch_sensor hub_detect"];
-  const srow = (label, on, enabled, bad, val) =>
-    '<div class="srow"><span class="dot ' + (bad ? "bad" : on && enabled ? "on" : "") + (enabled ? "" : " off") + '"></span>' +
-    '<span class="lbl">' + label + '</span>' +
-    '<span class="val' + (enabled ? "" : " off") + '">' + (enabled ? (val != null ? val : (on ? "filament" : "clear")) : "sensor off") + '</span></div>';
-
-  let verdict, verdictInk;
-  if (!P.SENSORS_OK) { verdict = "unknown — the entry sensor is off"; verdictInk = "var(--unknown)"; }
-  else if (P.IMPOSSIBLE) { verdict = "unknown — sensor fault"; verdictInk = "var(--fault)"; }
-  else if (S.mmu.in_melt_zone) { verdict = "must heat first"; verdictInk = "var(--staged)"; }
-  else { verdict = "cold pull is legal"; verdictInk = "var(--ok)"; }
-  const driverSays = S.mmu.cold_unload_ok ? "cold pull OK" : "must heat";
-  const stateSays  = (P.HOT ? "must heat" : "cold pull OK");
-  const disagree   = (S.mmu.cold_unload_ok === P.HOT);
-
-  html += '<div class="card d-tool">' +
-    '<div class="t-micro">Toolhead</div>' +
-    '<div style="margin-top:8px">' +
-      srow("hub", P.HUB, hubS.enabled, false, hubS.enabled ? hubS.reading.toFixed(1) + " V" : null) +
-      srow("entry", P.ENTRY, entryS.enabled, P.IMPOSSIBLE, null) +
-      srow("gears", P.POST, postS.enabled, P.IMPOSSIBLE, null) +
-      srow("melt zone", S.mmu.in_melt_zone, true, false, "derived") +
-    '</div>' +
-    '<div style="border-top:1px solid var(--divider);margin-top:10px;padding-top:10px">' +
-      '<div class="t-micro">Cold pull</div>' +
-      '<div class="t-strong" style="color:' + verdictInk + ';margin-top:2px">' + verdict + '</div>' +
-      '<div class="t-reason" style="margin-top:4px">driver says <b>' + driverSays +
-        '</b> · state says <b>' + stateSays + '</b>' + (disagree ? ' — they disagree' : "") + '</div>' +
-    '</div>' +
-    '<div style="display:flex;gap:8px;margin-top:12px">' +
-      '<div style="flex:1">' + ctl(G.audit) + '</div>' +
-      '<div style="flex:1">' + ctl(G.query) + '</div>' +
-    '</div>' +
-  '</div>';
-
-  /* lane tiles */
-  for (let i = 0; i < 4; i++) {
-    const st = laneState(i, P), C = laneControls(i, P);
-    const mm = sv.ace_staged_mm[i] || 0, tube = P.TUBE[i];
-    const f = tube > 0 ? Math.max(0, Math.min(1, mm / tube)) : 0;
-    const cls = ["tile", "d-tile", st.key === "empty" ? "empty" : "",
-                 st.key === "loaded" ? "loaded" : "", st.key === "fault" ? "fault" : "",
-                 st.key === "unknown" ? "unknownstate" : ""].join(" ");
-    html += '<div class="' + cls + '">' +
-      '<span class="rule" style="background:' + (st.key === "fault" ? "var(--fault)" :
-        st.key === "unknown" ? "var(--unknown)" : laneColor(i)) + '"></span>' +
-      '<div class="tile-head">' + swatch(S.ace_instance_0.slots[i].color) +
-        '<span class="id">T' + i + '</span><span class="grow"></span>' +
-        '<span class="t-micro" style="color:' + st.ink + '">' + st.badge + '</span>' +
-      '</div>' +
-      '<div class="name">' + esc(laneName(i)) + '</div>' +
-      '<div class="t-meta">' + esc(laneMeta(i)) + '</div>' +
-      '<div style="margin-top:16px"><div class="t-micro">' +
-        (st.key === "unknown" ? "presence" : st.key === "loaded" ? "loaded" : "staged") + '</div>' +
-        (st.key === "unknown"
-          ? '<div class="t-measure-xl" style="color:var(--unknown)">unknown</div>'
-          : '<div class="measure"><span class="t-measure-xl">' + (mm ? Math.round(mm) : "—") + '</span>' +
-            (mm ? '<span class="t-unit">/ ' + Math.round(tube) + ' mm</span>' : "") + '</div>') +
-        '<div class="bar' + (st.key === "unknown" ? " hatch" : "") + '">' +
-          (st.key === "unknown" ? "" :
-            '<span style="width:' + (f * 100).toFixed(1) + '%;background:' + laneColor(i) + '"></span>') +
-        '</div>' +
-        (st.key === "unknown" ? "" :
-          '<div class="t-reason" style="margin-top:4px">' + (mm ? (f * 100).toFixed(1) + " % of the lane tube" : "at the gate") + '</div>') +
-      '</div>' +
-      '<div class="tile-actions">' + ctl(C.load) + ctl(C.mid) + ctl(C.eject) + ctl(C.assign) + '</div>' +
-    '</div>';
-  }
-
-  /* hand-fed */
-  const hand = S.mmu.manual_tools.map(g =>
-    '<div style="flex:1;background:var(--surface-1);border:1px solid var(--divider);border-radius:10px;' +
-      'padding:8px 12px;display:flex;align-items:center;gap:10px">' +
-      swatch(S.mmu.gate_color_rgb[g]) +
-      '<span class="t-strong">G' + g + '</span>' +
-      '<span class="t-meta">' + (S.mmu.gate_status[g] === 1 ? "present" : "absent") + '</span>' +
-    '</div>').join("");
-  html += '<div class="d-hand">' +
-    '<div style="display:flex;align-items:baseline;gap:12px"><span class="t-micro">Hand-fed gates</span>' +
-      '<span class="t-reason">these lanes are loaded by hand — the ACE has no actuator on them</span></div>' +
-    '<div style="display:flex;gap:12px;margin-top:8px;align-items:center">' + hand +
-      '<div style="width:170px">' + ctl(globalControls(P).scan) + '</div></div>' +
-  '</div>';
-
-  /* footer */
-  html += '<div class="card d-bar">' +
-    ['audit','recover','clearop','unlock','recon','supp'].map(k =>
-      '<div style="width:190px">' + ctl(G[k]) + '</div>').join("") +
-    '<span style="flex:1"></span>' +
-    '<span class="t-reason">every command here is one an error message names today</span>' +
-  '</div>';
-
-  html += '</div>';
-  document.getElementById("abDesktop").innerHTML = html;
+ }
+ h+='</div>';
+ h+='<div style="flex:none">'+dryerStrip(P,G,true)+'</div>';
+ document.getElementById("abCard").innerHTML=h;
 }
 
-/* ==========================================================================
-   ARTBOARD 2 — PHONE
-   ========================================================================== */
-function renderPhone() {
-  const P = pred(S), G = globalControls(P), sv = S.save_variables.variables;
-  const st0 = !P.PATH_FREE ? pill("path busy", "busy") : P.JAM ? pill("jam T" + P.JAM_TOOL, "fault")
-            : P.IMPOSSIBLE ? pill("sensor fault", "fault") : !P.FRESH ? pill("stale", "unknown")
-            : pill("path clear", "ok");
+/* ===========================================================================
+   ARTBOARD 2 — FULL PAGE (1240)
+   =========================================================================== */
+function renderPage(){
+ const P=pred(S), G=globals(P), sv=S.save_variables.variables;
+ const i=focusLane, C=laneControls(i,P), t=tip(i,P);
+ let h='<div class="pgrid">';
 
-  let h = '<div class="p-head"><span class="t-title" style="font-size:15px">ACE 2 Pro</span>' + st0 +
-    '<span style="flex:1"></span><span class="t-meta">' + S.ace_instance_0.temp + ' °C · ' +
-    S.ace_instance_0.humidity + ' %</span></div>';
+ h+='<div class="card" style="grid-column:span 12;padding:14px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'+
+   '<span class="t-title">ACE 2 Pro</span><span class="t-meta">Anycubic · V1.1.3W</span>'+
+   (P.CONNECTED?pill("connected","ok"):pill("disconnected","fault"))+
+   (!P.AUDIT_RUN?pill("audit not run yet","unknown"):(P.AUDIT_OK?pill("coherent","ok"):pill("not coherent","fault")))+
+   (P.PATH_FREE?pill("path clear","ok"):pill("path busy","busy"))+
+   (P.TGT!==-1?pill("toolchange T"+P.CUR+"→T"+P.TGT,"busy"):"")+
+   (!P.NO_OP?pill("open intent","fault"):"")+
+   (P.SUPPRESSED?pill("suppression armed","staged"):"")+
+   pill(S.print_stats.state,"")+
+   '<span style="flex:1"></span>'+
+   '<span class="btn destructive" data-gcode="ACE_STOP_ALL" role="button">STOP ALL</span></div>';
 
-  h += '<div class="p-body">';
-  const b = banners(P, G);
-  if (b) h += b;
+ const b=banners(P,G); if(b) h+='<div style="grid-column:span 12;display:flex;flex-direction:column;gap:14px">'+b+'</div>';
+ const r=railHtml(P);  if(r) h+='<div style="grid-column:span 12">'+r+'</div>';
 
-  h += '<div class="card" style="padding:12px"><div class="t-micro">Path</div>' +
-       '<div style="margin-top:6px">' + pathSvg(P, "vertical") + '</div></div>';
+ /* lane selector */
+ h+='<div style="grid-column:span 12;display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
+   '<span class="t-micro">Lane detail</span>'+
+   [0,1,2,3].map(k=>'<span class="btn sm'+(k===i?" primary":"")+'" data-lane="'+k+'" role="button">'+
+     'T'+k+'</span>').join("")+
+   '<span class="t-reason">deep link: <span class="mono">/ace/#lane='+i+'</span></span></div>';
 
-  for (let i = 0; i < 4; i++) {
-    const stt = laneState(i, P), C = laneControls(i, P);
-    const mm = sv.ace_staged_mm[i] || 0, tube = P.TUBE[i];
-    const f = tube > 0 ? Math.max(0, Math.min(1, mm / tube)) : 0;
-    const expanded = (i === (P.CUR >= 0 ? P.CUR : 2));
-    h += '<div class="p-tile"' + (stt.key === "empty" ? ' style="border-style:dashed"' : "") + '>' +
-      '<span class="rule" style="background:' + (stt.key === "fault" ? "var(--fault)" :
-        stt.key === "unknown" ? "var(--unknown)" : laneColor(i)) + '"></span>' +
-      '<div style="display:flex;align-items:center;gap:10px">' + swatch(S.ace_instance_0.slots[i].color) +
-        '<span class="t-tile">T' + i + '</span>' +
-        '<span class="t-meta" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
-          esc(laneName(i)) + '</span>' +
-        '<span class="t-micro" style="color:' + stt.ink + '">' + stt.badge + '</span></div>' +
-      '<div class="measure" style="margin-top:6px">' +
-        (stt.key === "unknown"
-          ? '<span class="t-measure-xl" style="color:var(--unknown)">unknown</span>'
-          : '<span class="t-measure-xl">' + (mm ? Math.round(mm) : "—") + '</span>' +
-            (mm ? '<span class="t-unit">/ ' + Math.round(tube) + ' mm</span>' : "")) +
-      '</div>' +
-      '<div class="bar' + (stt.key === "unknown" ? " hatch" : "") + '">' +
-        (stt.key === "unknown" ? "" :
-          '<span style="width:' + (f * 100).toFixed(1) + '%;background:' + laneColor(i) + '"></span>') + '</div>' +
-      (expanded ? '<div class="p-actions">' + ctl(C.load) + ctl(C.mid) + ctl(C.eject) + ctl(C.assign) + '</div>'
-                : '<div class="t-reason" style="margin-top:6px">tap to show actions</div>') +
-    '</div>';
-  }
-  h += '</div>';
+ /* the lane frame */
+ h+='<div class="card" id="lane'+i+'" style="grid-column:span 8;padding:16px">'+
+  '<div class="thead" style="margin-bottom:10px">'+swatch(i)+
+    '<span class="t-tile">T'+i+'</span><span class="grow t-meta">'+esc(laneName(i))+' · '+esc(laneMeta(i))+'</span></div>'+
+  ladder(i,P,760,64,true)+
+  '<div style="display:flex;align-items:baseline;gap:10px;margin-top:4px">'+tipLine(i,P)+
+    '<span class="t-reason">1 px ≈ '+(P.TOTAL/744).toFixed(1)+' mm · to scale</span></div>'+
 
-  h += '<div class="p-foot">' +
-    '<span class="btn" data-gcode="ACE_AUDIT" role="button">Audit</span>' +
-    '<span class="btn" data-gcode="MMU_RECOVER" role="button">Recover</span>' +
-    '<span class="btn" data-gcode="ACE_CLEAR_OP" role="button" ' +
-      (P.NO_OP ? 'aria-disabled="true" tabindex="-1"' : "") + '>Clear op</span>' +
-    '<span class="btn destructive" style="max-width:120px" data-gcode="ACE_STOP_ALL" role="button">STOP ALL</span>' +
-  '</div>';
+  '<div style="border-top:1px solid var(--divider);margin-top:14px;padding-top:12px">'+
+   '<div class="t-micro">Move the tip to</div>'+
+   '<div class="chips" style="margin-top:8px">'+C.dest.map(chip).join("")+'</div>'+
+   '<div class="t-reason" style="margin-top:6px">'+
+     esc(C.dest.filter(d=>!d.enabled).map(d=>d.label+": "+d.reason).join(" · "))+'</div>'+
+  '</div>'+
 
-  document.getElementById("abPhone").innerHTML = h;
+  '<div style="border-top:1px solid var(--divider);margin-top:14px;padding-top:12px">'+
+   '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
+    '<span class="t-micro" style="width:56px">Jog ACE</span>'+
+    '<span class="btn sm"'+(C.jogBack.enabled?"":' aria-disabled="true" tabindex="-1"')+
+      ' data-gcode="'+esc(C.jogBack.gcode)+'" role="button" style="width:44px">−</span>'+
+    '<span class="btn sm"'+(C.jogFwd.enabled?"":' aria-disabled="true" tabindex="-1"')+
+      ' data-gcode="'+esc(C.jogFwd.gcode)+'" role="button" style="width:44px">+</span>'+
+    '<span class="t-reason">step</span>'+
+    [1,5,25,100].map(v=>'<span class="btn xs'+(v===jogStep?" primary":"")+'" data-step="'+v+'" role="button">'+v+' mm</span>').join("")+
+   '</div>'+
+   '<div class="t-reason" style="margin-top:5px">'+
+     esc(C.jogFwd.enabled?"sends ACE_FEED / ACE_RETRACT — tracked by the preload guard, never ACE_RAW_FEED, never FORCE=1":C.jogFwd.reason)+'</div>'+
+   '<div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">'+
+    '<span class="t-micro" style="width:56px">Jog extr</span>'+
+    '<span class="btn sm"'+(C.jogExtBack.enabled?"":' aria-disabled="true" tabindex="-1"')+
+      ' data-gcode="'+esc(C.jogExtBack.gcode)+'" role="button" style="width:44px">−</span>'+
+    '<span class="btn sm"'+(C.jogExtFwd.enabled?"":' aria-disabled="true" tabindex="-1"')+
+      ' data-gcode="'+esc(C.jogExtFwd.gcode)+'" role="button" style="width:44px">+</span>'+
+    '<span class="t-reason">'+esc(C.jogExtFwd.enabled?
+      "FORCE_MOVE has no guard of any kind — flagged for QA":C.jogExtFwd.reason)+'</span>'+
+   '</div>'+
+  '</div>'+
+
+  '<div style="border-top:1px solid var(--divider);margin-top:14px;padding-top:12px;display:flex;gap:10px;flex-wrap:wrap">'+
+   '<div style="width:210px">'+ctl(C.tagRead)+'</div>'+
+   '<div style="width:210px">'+ctl(C.tagWrite)+'</div>'+
+   '<div style="width:210px">'+ctl(C.assign)+'</div>'+
+   '<div style="width:210px">'+ctl(C.load)+'</div>'+
+   '<div style="width:210px">'+ctl(C.mid)+'</div>'+
+   '<div style="width:210px">'+ctl(C.eject)+'</div>'+
+  '</div></div>';
+
+ /* derivation + truth table */
+ const en=S["filament_switch_sensor toolhead_entry"], po=S["filament_switch_sensor toolhead_postgear"],
+       hu=S["filament_switch_sensor hub_detect"];
+ const srow=(l,on,ok,bad,v)=>'<div class="srow"><span class="dot '+(bad?"bad":(on&&ok?"on":""))+(ok?"":" off")+'"></span>'+
+   '<span class="lbl">'+l+'</span><span class="val'+(ok?"":" off")+'">'+(ok?(v!=null?v:(on?"filament":"clear")):"sensor off")+'</span></div>';
+
+ h+='<div class="card" style="grid-column:span 4;padding:16px">'+
+  '<div class="t-micro">Where that number comes from</div>'+
+  '<div class="t-meta" style="margin-top:8px">'+
+    (t.tier==="reckoned"
+      ? 'T'+i+' sits in the <b>ACE&nbsp;→&nbsp;hub</b> run. <b>Nothing is instrumented there.</b> '+
+        '<span class="mono">ace_staged_mm['+i+']</span> = '+P.MM[i]+' mm is commanded-length arithmetic, '+
+        'last re-anchored when the tip tripped <span class="mono">hub_detect</span>. '+
+        'The ±'+HUB_TOL+' is that switch: an ADC threshold polled at 0.3 s, so ~18 mm of lag at 60 mm/s.'
+      : t.tier==="measured"
+      ? 'A switch pins this one. <span class="mono">ace_hub_encoder</span> is zeroed on '+
+        '<span class="mono">hub_detect</span>’s rising edge, so <span class="mono">distance_mm</span> is '+
+        'literally millimetres past the hub over a calibrated 555.9 mm.'
+      : t.tier==="inferred"
+      ? 'Past the gears there is <b>no switch at all</b>. <span class="mono">mmu.in_melt_zone</span> is derived '+
+        'from state flags, so the band spans the whole segment and no dot is drawn.'
+      : 'Lane telemetry is stale ('+(S.ace_buffer_watch.age||0).toFixed(0)+' s). Presence is <b>unknown</b>, '+
+        'which is not the same as empty — and guessing empty is how a lane gets ejected.')+
+  '</div>'+
+  '<div class="t-reason" style="margin-top:8px">Untracked movers that can shift this silently: '+
+    '<span class="mono">ACE_RAW_FEED</span>, <span class="mono">ACE_TANDEM_EXTRACT</span>, '+
+    '<span class="mono">FORCE_MOVE</span> — none is wrapped by the preload guard.</div>'+
+  '<div style="border-top:1px solid var(--divider);margin-top:12px;padding-top:10px">'+
+   '<div class="t-micro">Sensors</div><div style="margin-top:6px">'+
+    srow("hub_detect",P.HUB,P.HU_OK,false,P.HU_OK?hu.reading.toFixed(1)+" V":null)+
+    srow("toolhead_entry",P.ENTRY,P.EN_OK,P.IMPOSSIBLE,null)+
+    srow("toolhead_postgear",P.POST,P.PO_OK,P.IMPOSSIBLE,null)+
+    srow("melt zone",S.mmu.in_melt_zone,true,false,"derived")+
+   '</div>'+
+   '<div class="t-reason" style="margin-top:6px">'+
+     (P.IMPOSSIBLE?'<span style="color:var(--fault)">entry=0 with post-gear=1 is impossible on a continuous strand.</span>':
+      !P.SENSORS_OK?'A switched-off sensor reports <span class="mono">false</span>, which is not <em>clear</em>.':
+      'driver says <b>'+(S.mmu.cold_unload_ok?"cold pull OK":"must heat")+'</b> · state says <b>'+
+      (P.HOT?"must heat":"cold pull OK")+'</b>'+((S.mmu.cold_unload_ok===P.HOT)?' — they disagree':""))+
+   '</div>'+
+  '</div></div>';
+
+ /* dryer + recovery */
+ h+='<div id="page-dryer" style="grid-column:span 12">'+dryerStrip(P,G,false)+'</div>';
+
+ h+='<div class="card" style="grid-column:span 12;padding:14px 16px">'+
+  '<div class="t-micro">Recovery and diagnostics</div>'+
+  '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">'+
+   ["audit","recover","clearop","unlock","recon","supp","jamclr","query","scan","cal","norm","bypass","guard","bufst","pstate","cleanup"]
+    .map(k=>'<div style="width:186px">'+ctl(G[k])+'</div>').join("")+
+  '</div>'+
+  '<div class="t-reason" style="margin-top:8px">Every command here is one an error message names today. '+
+   'The card carries the subset that answers a fault; this is the whole set.</div></div>';
+
+ h+='</div>';
+ document.getElementById("abPage").innerHTML=h;
 }
 
-/* ==========================================================================
-   ARTBOARD 3 — KLIPPERSCREEN 800x480
-   ========================================================================== */
-function renderKs() {
-  const P = pred(S), G = globalControls(P), sv = S.save_variables.variables;
-
-  /* 6.3 priority ladder — the one line that matters */
-  let ctx, ctxInk = "var(--text-dim)";
-  if (P.JAM)                                  { ctx = "JAM latched on T" + P.JAM_TOOL + ". Clear it before anything moves."; ctxInk = "var(--fault)"; }
-  else if (P.IMPOSSIBLE)                      { ctx = "FAULT: post-gear sees filament, entry does not. Move nothing."; ctxInk = "var(--fault)"; }
-  else if (P.EJECTING)                        { ctx = "Eject running on T" + P.EJECT_TOOL + ". Abort it, or wait."; ctxInk = "var(--busy)"; }
-  else if (P.AT_TOOLHEAD && P.CUR === -1)     { ctx = "Filament at the toolhead that no lane claims. Force-eject only once you can see whose it is."; ctxInk = "var(--fault)"; }
-  else if (!P.NO_OP)                          { ctx = "Open intent: " + P.OP + ". Recover before moving filament."; ctxInk = "var(--fault)"; }
-  else if (P.TGT !== -1)                      { ctx = "Toolchange T" + P.CUR + "→T" + P.TGT + " in flight."; ctxInk = "var(--busy)"; }
-  else if (!P.FRESH)                          { ctx = "Lane sensors are stale. Presence is unknown — do not assume empty."; ctxInk = "var(--unknown)"; }
-  else if (P.AT_TOOLHEAD && !P.HOT && !P.PARKED) { ctx = "Sensors show filament but the state says unloaded. Audit before moving anything."; ctxInk = "var(--fault)"; }
-  else if (P.CUR >= 0 && P.HOT)               { ctx = "T" + P.CUR + " is loaded, tip in the melt zone. Park to swap; eject to change the spool."; ctxInk = "var(--ok)"; }
-  else if (P.CUR >= 0)                        { ctx = "T" + P.CUR + " is loaded and parked cold. A cold pull is legal."; ctxInk = "var(--ok)"; }
-  else {
-    const s = P.STAGED.indexOf(true);
-    if (s >= 0) { ctx = "T" + s + " is staged " + Math.round(P.TUBE[s] - sv.ace_staged_mm[s]) +
-                        " mm short of the hub. Cold pull is legal."; ctxInk = "var(--staged)"; }
-    else {
-      const r = P.PRESENT.indexOf(true);
-      ctx = r >= 0 ? "Nothing loaded. T" + r + " is at the gate and ready to load."
-                   : "No filament in any lane. Insert a spool, then Load.";
-    }
-  }
-
-  let h = '<div class="ks-head">' +
-    '<span class="t-title" style="font-size:16px">ACE 2 Pro</span>' +
-    (P.CONNECTED ? pill("conn", "ok") : pill("down", "fault")) +
-    '<span class="t-meta">' + S.ace_instance_0.temp + ' °C ' + S.ace_instance_0.humidity + ' %</span>' +
-    (P.PATH_FREE ? pill("path clear", "ok") : pill("path busy", "busy")) +
-    '<span style="flex:1"></span>' +
-    '<span class="btn destructive ks-stop" data-gcode="ACE_STOP_ALL" role="button">STOP ALL</span>' +
+/* ===========================================================================
+   ARTBOARD 3 — PHONE
+   =========================================================================== */
+function renderPhone(){
+ const P=pred(S), G=globals(P);
+ const top=P.JAM?pill("jam T"+P.JAM_TOOL,"fault"):P.IMPOSSIBLE?pill("sensor fault","fault"):
+   !P.FRESH?pill("stale","unknown"):!P.PATH_FREE?pill("path busy","busy"):pill("path clear","ok");
+ let h='<div style="height:56px;flex:none;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--divider)">'+
+  '<span class="t-tile">ACE 2 Pro</span>'+top+'<span style="flex:1"></span>'+
+  '<span class="t-meta">'+S.ace_instance_0.temp+' °C · '+S.ace_instance_0.humidity+' %</span></div>';
+ h+='<div style="flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:12px">';
+ const b=banners(P,G); if(b) h+=b;
+ const r=railHtml(P); if(r) h+=r;
+ for(let i=0;i<4;i++){
+  const C=laneControls(i,P);
+  const open=(i===(P.CUR>=0?P.CUR:2));
+  h+='<div class="tile" style="padding:10px 12px 10px 14px">'+
+   '<span class="rule" style="background:'+(P.PRESENT[i]===null?"var(--unknown)":laneColor(i))+'"></span>'+
+   '<div class="thead">'+swatch(i)+'<span class="t-tile">T'+i+'</span>'+
+     '<span class="grow t-meta">'+esc(laneName(i))+'</span>'+
+     '<a class="btn door" href="#lane'+i+'" data-door="lane'+i+'">⟶</a></div>'+
+   ladder(i,P,340,44,false)+
+   '<div style="margin-top:2px">'+tipLine(i,P)+'</div>'+
+   (open?'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">'+
+     ctl(Object.assign({},C.load))+ctl(C.mid)+ctl(C.eject)+ctl(C.assign)+'</div>'
+    :'<div class="t-reason" style="margin-top:6px">tap to show actions</div>')+
   '</div>';
-
-  h += '<div class="ks-ctx" style="color:' + ctxInk + '">' + esc(ctx) + '</div>';
-
-  h += '<div class="ks-row">';
-  for (let i = 0; i < 4; i++) {
-    const st = laneState(i, P), C = laneControls(i, P);
-    const mm = sv.ace_staged_mm[i] || 0, tube = P.TUBE[i];
-    const f = tube > 0 ? Math.max(0, Math.min(1, mm / tube)) : 0;
-    const primary = C.load.enabled ? C.load : (C.mid.enabled ? C.mid : C.load);
-    h += '<div class="ks-tile"' + (st.key === "empty" ? ' style="border-style:dashed"' : "") + '>' +
-      '<span class="rule" style="background:' + (st.key === "fault" ? "var(--fault)" :
-        st.key === "unknown" ? "var(--unknown)" : laneColor(i)) + '"></span>' +
-      '<div style="display:flex;align-items:center;gap:8px;height:22px;padding-left:4px">' +
-        swatch(S.ace_instance_0.slots[i].color) +
-        '<span class="t-tile" style="font-size:14px">T' + i + '</span>' +
-        '<span style="flex:1"></span>' +
-        '<span class="t-micro" style="color:' + st.ink + ';font-size:9px">' + st.badge + '</span></div>' +
-      '<div style="font:650 13px/18px var(--font-ui);margin-top:4px;padding-left:4px;' +
-        'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(laneName(i)) + '</div>' +
-      '<div class="t-meta" style="font-size:11px;line-height:15px;padding-left:4px">' + esc(laneMeta(i)) + '</div>' +
-      '<div style="margin-top:8px;padding-left:4px">' +
-        (st.key === "unknown"
-          ? '<div style="font:600 20px/28px var(--font-ui);color:var(--unknown)">unknown</div>'
-          : '<div style="font:600 26px/30px var(--font-ui);letter-spacing:-.4px;font-variant-numeric:tabular-nums">' +
-            (mm ? Math.round(mm) : "—") + '</div>' +
-            '<div class="t-unit" style="font-size:11px">' + (mm ? "/ " + Math.round(tube) + " mm" : "at the gate") + '</div>') +
-      '</div>' +
-      '<div class="bar' + (st.key === "unknown" ? " hatch" : "") + '" style="margin-top:6px">' +
-        (st.key === "unknown" ? "" :
-          '<span style="width:' + (f * 100).toFixed(1) + '%;background:' + laneColor(i) + '"></span>') + '</div>' +
-      '<div style="flex:1"></div>' +
-      ctl(primary, "ks-btn") +
-      '<div style="height:8px"></div>' +
-      ctl(C.eject, "ks-btn") +
-    '</div>';
-  }
-
-  const entryS = S["filament_switch_sensor toolhead_entry"], postS = S["filament_switch_sensor toolhead_postgear"],
-        hubS = S["filament_switch_sensor hub_detect"];
-  const ksrow = (label, on, enabled, bad, val) =>
-    '<div class="srow"><span class="dot ' + (bad ? "bad" : on && enabled ? "on" : "") + (enabled ? "" : " off") + '"></span>' +
-    '<span class="lbl" style="font-size:12px">' + label + '</span>' +
-    '<span class="val' + (enabled ? "" : " off") + '" style="font-size:11px">' +
-      (enabled ? (val != null ? val : (on ? "yes" : "no")) : "off") + '</span></div>';
-  let ksVerdict, ksInk;
-  if (!P.SENSORS_OK)      { ksVerdict = "unknown — entry sensor off"; ksInk = "var(--unknown)"; }
-  else if (P.IMPOSSIBLE)  { ksVerdict = "unknown — sensor fault";     ksInk = "var(--fault)"; }
-  else if (S.mmu.in_melt_zone) { ksVerdict = "must heat first";            ksInk = "var(--staged)"; }
-  else                    { ksVerdict = "cold pull is legal";              ksInk = "var(--ok)"; }
-
-  h += '<div class="ks-tool"><div class="t-micro">Toolhead</div><div style="margin-top:6px">' +
-    ksrow("hub", P.HUB, hubS.enabled, false, hubS.enabled ? hubS.reading.toFixed(1) : null) +
-    ksrow("entry", P.ENTRY, entryS.enabled, P.IMPOSSIBLE, null) +
-    ksrow("gears", P.POST, postS.enabled, P.IMPOSSIBLE, null) +
-    ksrow("melt", S.mmu.in_melt_zone, true, false, "derived") +
-    '</div><div style="border-top:1px solid var(--divider);margin-top:8px;padding-top:8px">' +
-      '<div class="t-micro">Cold pull</div>' +
-      '<div style="font:600 13px/17px var(--font-ui);color:' + ksInk + ';margin-top:2px">' + ksVerdict + '</div>' +
-    '</div></div>';
-  h += '</div>';
-
-  h += '<div class="ks-foot">' +
-    '<span class="btn" data-gcode="ACE_AUDIT" role="button">Audit</span>' +
-    '<span class="btn" data-gcode="MMU_RECOVER" role="button">Recover</span>' +
-    '<span class="btn' + (P.NO_OP ? "" : "") + '" data-gcode="ACE_CLEAR_OP" role="button"' +
-      (P.NO_OP ? ' aria-disabled="true" tabindex="-1"' : "") + '>Clear op</span>' +
-    '<span class="btn" data-gcode="ACE_DRY TEMP=45 MINUTES=240" role="button">Dryer</span>' +
-    '<span class="btn" data-gcode="ACE_LANES" role="button">More</span>' +
-  '</div>';
-
-  document.getElementById("abKs").innerHTML = h;
+ }
+ h+=dryerStrip(P,G,true);
+ h+='</div>';
+ h+='<div style="height:64px;flex:none;display:flex;align-items:center;gap:8px;padding:0 12px;border-top:1px solid var(--divider)">'+
+  '<span class="btn" style="flex:1;min-height:48px" data-gcode="ACE_AUDIT" role="button">Audit</span>'+
+  '<span class="btn" style="flex:1;min-height:48px" data-gcode="MMU_RECOVER" role="button">Recover</span>'+
+  '<span class="btn'+(P.NO_OP?"":"")+'" style="flex:1;min-height:48px"'+(P.NO_OP?' aria-disabled="true" tabindex="-1"':"")+
+    ' data-gcode="ACE_CLEAR_OP" role="button">Clear op</span>'+
+  '<span class="btn destructive" style="width:104px;min-height:48px" data-gcode="ACE_STOP_ALL" role="button">STOP</span></div>';
+ document.getElementById("abPhone").innerHTML=h;
 }
 
-/* ==========================================================================
+/* ===========================================================================
+   ARTBOARD 4 — KLIPPERSCREEN 800x480 (sufficiency)
+   =========================================================================== */
+function renderKs(){
+ const P=pred(S), G=globals(P), sv=S.save_variables.variables;
+ let ctx,ink="var(--text-dim)";
+ if(P.JAM){ctx="JAM latched on T"+P.JAM_TOOL+". Clear it before anything moves.";ink="var(--fault)";}
+ else if(P.IMPOSSIBLE){ctx="FAULT: post-gear sees filament, entry does not. Move nothing.";ink="var(--fault)";}
+ else if(P.EJECTING){ctx="Eject running on T"+P.EJECT_TOOL+". Abort it, or wait.";ink="var(--busy)";}
+ else if(P.AT_TOOLHEAD&&P.CUR===-1){ctx="Filament at the toolhead that no lane claims. Force-eject only once you can see whose it is.";ink="var(--fault)";}
+ else if(!P.NO_OP){ctx="Open intent: "+P.OP+". Recover before moving filament.";ink="var(--fault)";}
+ else if(P.TGT!==-1){ctx="Toolchange T"+P.CUR+"→T"+P.TGT+" never finished. Reconcile it.";ink="var(--busy)";}
+ else if(!P.FRESH){ctx="Lane sensors are stale. Presence is unknown — do not assume empty.";ink="var(--unknown)";}
+ else if(P.AT_TOOLHEAD&&!P.HOT&&!P.PARKED){ctx="Sensors show filament but the state says unloaded. Audit before moving anything.";ink="var(--fault)";}
+ else if(P.DRY_FAULT){ctx="Dryer fault: "+S.ace_instance_0.dryer_status.state_detail+". Heating has stopped.";ink="var(--fault)";}
+ else if(P.CUR>=0&&P.HOT){ctx="T"+P.CUR+" is loaded, tip in the melt zone. Park to swap; eject to change the spool.";ink="var(--ok)";}
+ else if(P.CUR>=0){ctx="T"+P.CUR+" is loaded and parked cold. A cold pull is legal.";ink="var(--ok)";}
+ else{const s=P.STAGED.indexOf(true);
+  if(s>=0){ctx="T"+s+" is staged "+Math.round(P.MARK.hub-sv.ace_staged_mm[s])+" mm short of the hub. Cold pull is legal.";ink="var(--staged)";}
+  else{const q=P.PRESENT.indexOf(true);
+   ctx=q>=0?"Nothing loaded. T"+q+" is at the gate and ready to load.":"No filament in any lane. Insert a spool, then Load.";}}
+
+ let h='<div style="height:48px;flex:none;display:flex;align-items:center;gap:12px;background:var(--surface-1);'+
+   'border:1px solid var(--divider);border-radius:14px;padding:0 12px">'+
+  '<span class="t-title" style="font-size:16px">ACE 2 Pro</span>'+
+  (P.CONNECTED?pill("conn","ok"):pill("down","fault"))+
+  '<span class="t-meta">'+S.ace_instance_0.temp+' °C '+S.ace_instance_0.humidity+' %</span>'+
+  (P.AUTODRY?pill("auto-dry","ok"):"")+
+  '<span style="flex:1"></span>'+
+  '<span class="btn destructive" style="width:148px;min-height:48px" data-gcode="ACE_STOP_ALL" role="button">STOP ALL</span></div>';
+ h+='<div style="height:26px;flex:none;display:flex;align-items:center;padding:0 4px;font:500 13px/16px var(--font-ui);'+
+   'color:'+ink+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(ctx)+'</div>';
+
+ h+='<div style="height:300px;flex:none;display:flex;gap:8px">';
+ for(let i=0;i<4;i++){
+  const C=laneControls(i,P), st=tip(i,P);
+  const primary=C.load.enabled?C.load:(C.mid.enabled?C.mid:C.load);
+  h+='<div class="tile" style="width:148px;flex:none;padding:8px">'+
+   '<span class="rule" style="background:'+((P.JAM&&P.JAM_TOOL===i)?"var(--fault)":
+     P.PRESENT[i]===null?"var(--unknown)":laneColor(i))+';width:4px"></span>'+
+   '<div class="thead" style="padding-left:4px">'+swatch(i)+'<span class="t-tile" style="font-size:14px">T'+i+'</span></div>'+
+   '<div style="font:650 12.5px/17px var(--font-ui);padding-left:4px;margin-top:3px;white-space:nowrap;'+
+     'overflow:hidden;text-overflow:ellipsis">'+esc(laneName(i))+'</div>'+
+   ladder(i,P,132,40,false)+
+   '<div class="t-reason" style="font-size:11px;line-height:14px;padding-left:2px;height:28px;overflow:hidden">'+
+     esc(tip(i,P).label)+'</div>'+
+   '<div style="flex:1"></div>'+
+   '<span class="btn'+(primary.enabled?" primary":"")+'" style="min-height:52px"'+
+     (primary.enabled?"":' aria-disabled="true" tabindex="-1"')+' data-gcode="'+esc(primary.gcode)+
+     '" role="button" title="'+esc(primary.reason)+'">'+esc(primary.label.split(" ")[0])+'</span>'+
+   '<div style="height:8px"></div>'+
+   '<span class="btn destructive" style="min-height:52px"'+(C.eject.enabled?"":' aria-disabled="true" tabindex="-1"')+
+     ' data-gcode="'+esc(C.eject.gcode)+'" role="button" title="'+esc(C.eject.reason||C.eject.caution)+'">'+
+     esc(C.eject.label.replace(" (force)"," !"))+'</span>'+
+   '<div class="t-reason" style="font-size:10.5px;line-height:13px;height:26px;overflow:hidden;margin-top:3px">'+
+     esc(!primary.enabled?primary.reason:(C.eject.caution||""))+'</div>'+
+  '</div>';
+ }
+ const en=S["filament_switch_sensor toolhead_entry"], po=S["filament_switch_sensor toolhead_postgear"],
+       hu=S["filament_switch_sensor hub_detect"];
+ const kr=(l,on,ok,bad,v)=>'<div class="srow" style="height:30px"><span class="dot '+(bad?"bad":(on&&ok?"on":""))+(ok?"":" off")+
+   '"></span><span class="lbl" style="font-size:12px">'+l+'</span><span class="val'+(ok?"":" off")+
+   '" style="font-size:11px">'+(ok?(v!=null?v:(on?"yes":"no")):"off")+'</span></div>';
+ let verdict,vink;
+ if(!P.SENSORS_OK){verdict="unknown — entry sensor off";vink="var(--unknown)";}
+ else if(P.IMPOSSIBLE){verdict="unknown — sensor fault";vink="var(--fault)";}
+ else if(S.mmu.in_melt_zone){verdict="must heat first";vink="var(--staged)";}
+ else{verdict="cold pull is legal";vink="var(--ok)";}
+ h+='<div class="tile" style="width:160px;flex:none;padding:8px 10px"><div class="t-micro">Toolhead</div>'+
+   '<div style="margin-top:6px">'+kr("hub",P.HUB,P.HU_OK,false,P.HU_OK?hu.reading.toFixed(1):null)+
+   kr("entry",P.ENTRY,P.EN_OK,P.IMPOSSIBLE,null)+kr("gears",P.POST,P.PO_OK,P.IMPOSSIBLE,null)+
+   kr("melt",S.mmu.in_melt_zone,true,false,"derived")+'</div>'+
+   '<div style="border-top:1px solid var(--divider);margin-top:8px;padding-top:8px">'+
+   '<div class="t-micro">Cold pull</div><div style="font:600 13px/17px var(--font-ui);color:'+vink+';margin-top:2px">'+
+   verdict+'</div></div></div>';
+ h+='</div>';
+
+ h+='<div class="ks-foot" style="height:72px;flex:none;display:flex;gap:8px">'+
+  '<span class="btn" data-gcode="ACE_AUDIT" role="button">Audit</span>'+
+  '<span class="btn" data-gcode="MMU_RECOVER" role="button">Recover</span>'+
+  '<span class="btn'+(P.NO_OP?"":"")+'"'+(P.NO_OP?' aria-disabled="true" tabindex="-1"':"")+
+    ' data-gcode="ACE_CLEAR_OP" role="button">Clear op</span>'+
+  '<span class="btn'+(P.JAM?" primary":"")+'"'+(P.JAM?"":' aria-disabled="true" tabindex="-1"')+
+    ' data-gcode="ACE_BUFFER_DISARM" role="button">Clear jam</span>'+
+  '<span class="btn'+(P.DRYING||P.AUTODRY?" destructive":"")+'" data-gcode="'+
+    (P.DRYING||P.AUTODRY?"ACE_DRY_OFF":"ACE_AUTODRY MATERIAL=PLA")+'" role="button">'+
+    (P.DRYING||P.AUTODRY?"Dry off":"Auto-dry")+'</span>'+
+  '<span class="btn" data-gcode="_ACE_SUPPRESSION_DISARM" role="button">Clear supp</span>'+
+ '</div>';
+ document.getElementById("abKs").innerHTML=h;
+}
+
+/* ===========================================================================
    WIRING
-   ========================================================================== */
-function renderAll() {
-  renderDesktop(); renderPhone(); renderKs();
-  document.getElementById("payload").textContent = JSON.stringify(S, null, 1);
-  document.getElementById("specNote").textContent = STATES[current].note;
+   =========================================================================== */
+function renderAll(){
+ renderCard();renderPage();renderPhone();renderKs();
+ document.getElementById("payload").textContent=JSON.stringify(S,null,1);
+ document.getElementById("note").textContent=STATES[current].note;
 }
-
-function setState(key) {
-  current = key;
-  S = STATES[key].make(base());
-  document.querySelectorAll("#states .seg").forEach(b =>
-    b.setAttribute("aria-pressed", String(b.dataset.key === key)));
-  renderAll();
+function setState(k){
+ current=k;S=STATES[k].make(base());
+ document.querySelectorAll("#states .seg").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.key===k)));
+ renderAll();
 }
+(function init(){
+ const host=document.getElementById("states");
+ host.innerHTML=Object.keys(STATES).map(k=>'<button class="seg" data-key="'+k+'" aria-pressed="'+
+   (k===current)+'">'+esc(STATES[k].label)+'</button>').join("");
+ host.addEventListener("click",e=>{const b=e.target.closest(".seg");if(b)setState(b.dataset.key);});
 
-(function init() {
-  const host = document.getElementById("states");
-  host.innerHTML = Object.keys(STATES).map(k =>
-    '<button class="seg" data-key="' + k + '" aria-pressed="' + (k === current) + '">' +
-    esc(STATES[k].label) + '</button>').join("");
-  host.addEventListener("click", e => {
-    const b = e.target.closest(".seg"); if (b) setState(b.dataset.key);
-  });
+ const t=document.getElementById("theme");
+ t.addEventListener("click",()=>{
+  const dark=document.documentElement.getAttribute("data-theme")!=="light";
+  document.documentElement.setAttribute("data-theme",dark?"light":"dark");
+  t.setAttribute("aria-pressed",String(dark));
+  t.textContent=dark?"Dark theme":"Light theme";});
 
-  const t = document.getElementById("theme");
-  t.addEventListener("click", () => {
-    const dark = document.documentElement.getAttribute("data-theme") !== "light";
-    document.documentElement.setAttribute("data-theme", dark ? "light" : "dark");
-    t.setAttribute("aria-pressed", String(dark));
-    t.textContent = dark ? "Dark theme" : "Light theme";
-  });
+ document.addEventListener("click",e=>{
+  const lane=e.target.closest("[data-lane]");
+  if(lane){focusLane=parseInt(lane.dataset.lane,10);renderPage();return;}
+  const step=e.target.closest("[data-step]");
+  if(step){jogStep=parseInt(step.dataset.step,10);renderPage();return;}
+  /* the doorway: a card control that belongs on the page deep-links to it */
+  const door=e.target.closest("[data-door]");
+  if(door){
+   const d=door.dataset.door;
+   if(d.indexOf("lane")===0){focusLane=parseInt(d.slice(4),10);renderPage();}
+   e.preventDefault();
+   document.getElementById("abPage").scrollIntoView({behavior:"smooth",block:"start"});
+   return;}
+  const b=e.target.closest("[data-gcode]");
+  if(!b)return;
+  if(b.getAttribute("aria-disabled")==="true")return;
+  /* real panel: rpc("printer.gcode.script", {script: b.dataset.gcode}); */
+  window.console.log("would send:",b.dataset.gcode);
+ });
 
-  /* nothing sends gcode; wiring it is one line, and the string is inspectable */
-  document.addEventListener("click", e => {
-    const b = e.target.closest("[data-gcode]");
-    if (!b) return;
-    if (b.getAttribute("aria-disabled") === "true") return;
-    /* real panel: rpc("printer.gcode.script", {script: b.dataset.gcode}); */
-    window.console.log("would send:", b.dataset.gcode);
-  });
-
-  setState("live");
+ setState("live");
 })();
 </script>
 </body>
