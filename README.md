@@ -108,6 +108,8 @@ Moving the authentication and decode **into** the firmware — filling the norma
 | [docs/09-error-states-and-jam-detection.md](docs/09-error-states-and-jam-detection.md) | The seven error states, what jam detection really measures, when it is switched off, and the solved post-STOP window |
 - [10. Spool drive and feed telemetry](docs/10-spool-drive-and-feed-telemetry.md) — the spool and feed gears share one motor (proven); `magnitude_mm` is the motor, `moved_mm` is the filament
 | [docs/11-operator-interface.md](docs/11-operator-interface.md) | **The unit has no controls of its own** — so the Klipper front-end *is* the control panel. What the panels get wrong, what the operator still has to type, and the card the ACE should have |
+| [docs/12-panel-visual-design.md](docs/12-panel-visual-design.md) | The panel's visual language measured against WCAG, every component in seven states, layouts at real pixel dimensions, and the required control set traced to its gcode and its refusal string |
+| [docs/13-standalone-control-box.md](docs/13-standalone-control-box.md) | **A physical control box that drives one or more units with no Klipper.** Why two masters on one bus cannot work, why the box should own the link behind a switch rather than in front of Klipper, hardware and RS-485 costed, multi-unit addressing, and an honest effort estimate |
 | [examples/README.md](examples/README.md) | Installing the Klipper extra, and G-code usage |
 
 ## Using it
