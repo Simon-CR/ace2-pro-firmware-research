@@ -21,6 +21,49 @@ unreachable unless a whole printer is switched on to babysit it. That is the gap
 This chapter answers the architecture question first, because it decides everything else, then
 scopes hardware, the control set, the hard parts, safety, and a staged plan.
 
+> **Status, 2026-08-31: tabled.** Not cancelled — deferred with no date. The scoping stands and the
+> conclusions below are unchanged. What follows is the part that must survive the pause: the
+> constraints this proposal places on decisions being made *now*, in the panel and the driver, so
+> that reviving it later is a build rather than a rewrite.
+
+### Carry-forward constraints
+
+A conversation after this chapter was written moved the recommended shape. The switch (§1.4) solves
+bus ownership, but it has a cost that was not stated: **flipping it takes the ACE away from Klipper.**
+While the printer is up and idle, that makes the box worse than the web UI, not better.
+
+The resolution is that **the box does not need the bus while Klipper has it.** It talks to the ACE
+*through* Klipper — Moonraker's API, the same macros the web panel calls. Two transports, one UI:
+
+| Printer state | Transport | Path landmarks visible |
+|---|---|---|
+| Up (idle or printing) | Moonraker HTTP/websocket | **All five.** Every driver guard inherited free. |
+| Absent or off | RS-485, switch flipped | **Two.** "In the lane", "somewhere past the outlet, reckoned." |
+
+That demotes the switch from a mode you live in to a **fallback you use when there is no printer at
+all** — bench work, a shelf dryer, a unit feeding something that is not a printer. It also re-orders
+§8 substantially: the network transport is the whole product for anyone who owns a Klipper machine,
+needs **zero** new protocol work, and is the panel of [doc 12](12-panel-visual-design.md) running on
+a Pi. The RS-485 firmware becomes the optional second phase, justified by offline drying alone.
+
+**Four constraints on work happening now:**
+
+1. **The panel must be transport-agnostic.** One UI, swappable backend. Do not hardwire Moonraker
+   calls into components — route every action through a single adapter with a documented surface.
+   This costs almost nothing today and is most of the box's UI work if done later.
+2. **Every panel feature needs a defined degraded state.** Standalone has two landmarks, not five.
+   Any component that assumes toolhead sensors exist must have a specified "unknown" rendering —
+   which [doc 12](12-panel-visual-design.md) already demands for a different reason, so the two
+   requirements agree.
+3. **Exactly one master owns the pair, always.** Nothing anywhere may assume concurrent access. The
+   state reasons in §1.2 do not soften with better arbitration.
+4. **Multi-unit addressing defers to ACEPRO's existing bus discovery.** Do not invent a competing
+   convention in the box; §3 already says this, and it now also binds the network transport.
+
+**What would revive this:** wanting to dry a spool with the printer off, acquiring a second unit that
+is not attached to a printer, or anyone else in the community asking for offline control.
+
+
 **The short version:**
 
 | Question | Answer |
