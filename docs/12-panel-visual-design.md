@@ -15,6 +15,37 @@ A rendered proof of this specification lives at
 [`examples/ace-panel-mockup/index.html`](../examples/ace-panel-mockup/) — a single self-contained
 file with all three artboards, a theme toggle, and a state switcher.
 
+### The organising question — re-weighted 2026-08-31, after the owner opened `/ace/`
+
+> *"It's the same as the fake camera, and it's passive, so little value add to open it to only get
+> the same view as the camera which I can see from the Klipper web UI."*
+
+That is decisive, and it re-weights everything below. **A prettier read-only panel is not a
+deliverable.** The nginx logs show `/ace/` has never been opened voluntarily, and the reason is now
+on record: it duplicates a view he already has. The panel earns its existence only as a *control
+surface*.
+
+So the organising question for every pixel is not *what can I see here* but:
+
+> **What can I click here that I currently have to type?**
+
+The evidence pass counted **137 operator-facing messages naming a command with no button**, and
+**none of those commands has ever been run from the machine**. Closing that deficit is the
+deliverable. Three rules follow, and they override any layout instinct:
+
+1. **Status earns pixels only where it is the direct basis for the next click.** A number that does
+   not change what you press is scenery, and scenery is what the camera already gives him. The dryer
+   prose is cut. The path diagram survives *because it is the thing you click to act on a lane*
+   (§2.2); if it were only a picture it would shrink to a strip.
+2. **Controls come first in the layout, not after the pretty part.** §3.1's block order puts the
+   action rail and the lane tiles above the diagram, not below it.
+3. **The web panel gets the depth; the touchscreen gets sufficiency.** He debugs at the desk. The
+   touchscreen requirement is unchanged and non-negotiable — every action reachable, every prompt
+   answerable — but it is sized for *completeness*, not richness. §3.3 is a sufficiency spec.
+
+The single component that closes the 137-message deficit generically, rather than one button at a
+time, is the **action rail** (§2.12). It is the most important thing in this document.
+
 ---
 
 ## 0. Live machine state this specification was measured against
@@ -668,6 +699,68 @@ above the buttons carrying the error) · **stale** (the dialog was opened more t
 its underlying state has changed: a `--unknown` strip reads `state changed since this was
 opened — re-check before acting`, and motion buttons go disabled-with-reason).
 
+### 2.12 The action rail — the component that closes the 137-message deficit
+
+Every one of those 137 messages is the machine having already worked out what should happen next and
+then declining to offer it. Adding 137 buttons by hand is a year of work and a cluttered screen. The
+rail solves it **generically**: it watches what the machine says, and turns any command named in that
+text into a button.
+
+**Mechanism.** Subscribe to Moonraker's `notify_gcode_response` and seed from
+`GET /server/gcode_store?count=200`. For each message, match against a manifest of known commands and
+emit a button per hit:
+
+```js
+// The manifest is the ~40 ACE/MMU commands, longest-first so ACE_LANE_UNLOAD_ABORT
+// wins over ACE_LANE_UNLOAD. Arguments are lifted from the SAME message, so
+// "run MMU_RECOVER GATE=2" produces a button that sends GATE=2, not a bare command.
+const HIT = new RegExp("\\b(" + MANIFEST.join("|") + ")\\b((?:\\s+[A-Z_]+=[^\\s]+)*)");
+```
+
+Each rail item carries: **the button**, **the sentence that named it** (truncated to one line, full
+text on hover/expand), **a timestamp**, and **the same enabled-when predicate the control table gives
+that command** — so a rail button for `ACE_LANE_EJECT T=2` greys with the same reason as the tile
+button, and the rail never becomes a back door around a guard.
+
+**Rules that keep it from becoming noise:**
+
+| rule | why |
+|---|---|
+| Dedupe by `command + args`; keep the newest, show a count badge | the same message fires five times during one bad swap |
+| Cap at 6 items; oldest fall off | a rail longer than the screen is a log, and he has a console for logs |
+| A command already offered by a visible enabled control is **not** added | no duplicate buttons for `Load`/`Eject`/`Audit` when the tile shows them |
+| Items expire after 15 minutes, or immediately when their predicate becomes trivially satisfied (`Clear op` disappears once `ace_op` is empty) | a stale suggestion is worse than none |
+| A command not in the manifest renders as **text with a copy affordance**, never as a button | never dispatch a string the panel does not understand |
+| Messages of `type: "command"` (echoes of what was typed) are ignored; only `type: "response"` | otherwise the rail suggests what you just ran |
+
+**Appearance.** Full-width strip directly beneath the header, above everything else. `--surface-2`
+ground, `--r-card`, 1 px `--divider`, min-height 0 — **it is absent when empty and reserves no
+space.** Each item is a 36 px row: a 3 px left rule in `--staged` (or `--fault` when the message was
+`TYPE=error`), the button at its natural width, then the sentence in `t-meta`, truncated.
+
+```
+┌─┬──────────────────────────────────────────────────────────────────────────────┐
+│▌│ [ MMU_RECOVER GATE=2 ]   filament is at the toolhead but no lane owns it…  2m │
+│▌│ [ ACE_CLEAR_OP ]         toolchange T2→T1 interrupted; open intent recorded 2m│
+│▌│ [ ACE_AUDIT ]            run ACE_AUDIT to see where the filament is        2m │
+└─┴──────────────────────────────────────────────────────────────────────────────┘
+```
+
+**States:** default · hover/pressed on its buttons · disabled-with-reason (predicate from §4.3) ·
+in-flight (participle + `--busy` rule) · fault (item's left rule `--fault`) · **stale** (the message
+is older than 15 min and has not been superseded → the row dims to `--text-faint` and the button
+becomes disabled-with-reason `this suggestion is {n} minutes old — re-check the state first`) ·
+**empty (the component does not render at all)**.
+
+**Why this is the highest-value component here.** It is the only one whose payoff scales with the
+number of error messages rather than with implementation effort, it needs no macro changes, and it
+degrades safely: an unknown command is text, a guarded command is guarded. It also *measures itself* —
+if the rail is usually empty the machine is behaving, and if it is usually full that is the backlog,
+visible.
+
+**It does not replace the per-lane controls.** A rail is reactive; it only offers what has already
+gone wrong. The lane tiles are how you act before anything says anything.
+
 ---
 
 ## 3. Layouts, at real pixel dimensions
@@ -680,19 +773,24 @@ column span change.
 Page: `--bg`, `padding: 24px`, content `max-width: 1240px`, centred. Grid: 12 × 82.9 px columns,
 20 px gutter (`grid-template-columns: repeat(12, minmax(0,1fr)); gap: 20px`).
 
+**Block order is controls-first.** The diagram used to sit above the lane tiles; it now sits below
+them. What is above the fold is what you can press.
+
 | # | block | span | height | contents |
 |---|---|---|---|---|
-| 1 | header card | 12 | 108 | row A (56 px): `ACE 2 Pro` title · `connected` pill · `fw V1.1.3W` pill · `path clear` pill · job pill · right-aligned `STOP ALL` (destructive, 36 px, 140 px wide). Row B (44 px, above a `--divider`): dryer strip (§2.7) |
-| 2 | banners | 12 | 0 or 96 each | fault, then jam, then any in-flight notice. Absent when clear — they do not reserve space |
-| 3 | path card | 8 | 300 | `PATH` micro-label, the SVG (§2.2) at 760 × 220, caption line, `Calibrate path` button in the caption when uncalibrated |
-| 4 | toolhead card | 4 | 300 | §2.10, four sensor rows + verdict, plus `Audit` and `Query sensors` |
-| 5 | lane tiles | 3 each | 268 | four §2.1 tiles across |
-| 6 | hand-fed strip | 12 | 84 | §2.8 |
-| 7 | action bar | 12 | 60 | `Audit` · `Recover` · `Clear op` · `Clear suppression` · `Reconcile target` · spacer · `Console` (link) |
+| 1 | header card | 12 | 108 | row A (56 px): `ACE 2 Pro` title · connection · path · **audit verdict** · open-intent · job pills · right-aligned `STOP ALL` (destructive, 36 px, 150 px). Row B (44 px, above a `--divider`): dryer strip (§2.7) with its three controls |
+| 2 | banners | 12 | 0 or 96 each | fault, then jam, then open intent. Absent when clear — they reserve no space |
+| 3 | **action rail** | 12 | 0 or 36 per item | §2.12. Directly under the header because it is the answer to "what does the machine want me to type". Absent when empty |
+| 4 | **lane tiles** | 3 each | 268 | four §2.1 tiles across — **promoted above the diagram** |
+| 5 | path card | 8 | 260 | `PATH` micro-label, the SVG (§2.2) at 760 × 200, caption, `Calibrate path` in the caption when uncalibrated. **Each lane's run is a click target** that scrolls to and highlights that lane's tile; without that behaviour this block drops to a 96 px strip |
+| 6 | toolhead card | 4 | 260 | §2.10, four sensor rows + cold-pull verdict, plus `Audit` and `Query sensors` |
+| 7 | hand-fed strip | 12 | 84 | §2.8 |
+| 8 | recovery bar | 12 | 60 | `Audit` · `Recover` · `Clear op` · `Unlock toolchange` · `Reconcile target` · `Clear suppression` — every one of them a command an error message names today |
 
-Total above the fold at 1440 × 900: header 108 + path/toolhead 300 + lanes 268 = 676 plus gutters —
-**the header, the path, the toolhead verdict and all four lane tiles are visible without
-scrolling.** That is the "single pane of glass" requirement, met at the size he actually uses.
+Above the fold at 1440 × 900: header 108 + rail (0–108) + lane tiles 268 = 376 to 484 plus gutters.
+**All four lane tiles, every lane control, the recovery rail and `STOP ALL` are visible without
+scrolling, and the diagram is what you scroll to.** That inverts the current panel, which spends its
+first screen on a picture and a dryer paragraph and offers nothing to press.
 
 Breakpoints, and what collapses:
 
@@ -715,7 +813,9 @@ scrolls and the two things you must never lose are *what state is it in* and *ho
 |---|---|---|---|
 | 1 | sticky header | 56 | `ACE 2 Pro` · state pill · theme toggle. Backdrop `--bg` at 92 % with a `--divider` bottom edge |
 | 2 | banners | 96 each | as desktop |
-| 3 | path card | 236 | the SVG rotates to a **vertical rail** 366 × 180: four lanes as short horizontal stubs feeding a vertical shared run. Same rules, same sources |
+| 2b | **action rail** | 44 per item, max 3 | §2.12, immediately under the header. On a phone it is capped at 3 items and the sentence wraps to two lines |
+| 3 | lane tiles ×4 | see row 5 | **promoted above the diagram**, same inversion as desktop |
+| 4 | path card | 236 | the SVG rotates to a **vertical rail** 300 × 280: four lane stubs across the top feeding a vertical shared run. Same rules, same sources |
 | 4 | toolhead row | 76 | the four sensor dots on one row with labels beneath, verdict on a second line |
 | 5 | lane tiles ×4 | 116 collapsed / 244 expanded | collapsed = swatch, `T2 · Bambu Lab Yellow PLA`, badge, `884 / 934 mm`, bar. Tap anywhere on the tile to expand the four buttons. **One tile expanded at a time**; expanding scrolls it to just below the sticky header |
 | 6 | hand-fed strip | 108 | two stacked rows |
@@ -728,6 +828,12 @@ column (175 px), so every hit area is ≥ 48 × 48.
 Landscape phone falls through to the 700–899 desktop breakpoint; it is not a separate design.
 
 ### 3.3 KlipperScreen — 800 × 480 landscape, one screen, no scrolling
+
+**This screen is sized for sufficiency, not for depth.** The owner debugs at the desk, not at the
+machine; the touchscreen's finding that it sent one command in three weeks reflects where he stands
+at least as much as it reflects the UI. The requirement here is unchanged and non-negotiable —
+**every action reachable and every prompt answerable without a browser** — but the design effort and
+the richness belong on the web panel. Read §3.3 as a completeness checklist and §3.1 as the design.
 
 Hard constraint: everything fits in 480 px vertical and nothing scrolls. The arithmetic, exactly:
 
@@ -1274,25 +1380,29 @@ buttons, to one decisive line and a safe row above a destructive row.** And `Loa
 
 ## 7. Sized and sequenced
 
-Ordered so something visibly better lands early. Each slice is independently shippable and each one
-changes what the owner sees.
+Ordered so the panel becomes **clickable** before it becomes handsome. The earlier ordering put the
+visual language third and the buttons fourth; that was written before the owner said the panel is
+"passive, so little value add to open it". Controls now lead, and the styling arrives with them
+rather than ahead of them.
 
 | # | Slice | Size | What he sees after it |
 |---|---|---|---|
-| **0** | `.theme/navi.json` — an `ACE` entry pointing at `/ace/` (§5.3) | **XS** | An **ACE item in Mainsail's sidebar**, on both instances, that survives every update. The panel stops being a URL you have to remember. Same day. |
-| **1** | Truth pass on the existing panel: read `ace_staged_mm`; delete `laneState()`'s "in ACE, not fed"; fix the shared-run owner; draw entry=0/post=1 as a fault; render `enabled:false` as `sensor off`; drop `lane_empty` | **S** | Lane 2 stops being described as *"in ACE, not fed"* beside a diagram drawn 94.6 % full. **The panel stops contradicting itself.** No new pixels, and the biggest lie is gone. |
-| **2** | `ACE_STOP_ALL` (§4.5) + the `ACE_LANES` rewrite (§6.3), including the `.steps` crash | **S** | The touchscreen dialog becomes usable: one decisive line, a Load button, a jam button, and one control that stops everything. The dialog appears during an eject instead of crashing. |
-| **3** | The visual language: tokens, type, spacing, theme toggle, header + dryer strip, lane tiles as objects, hand-fed strip, redrawn path diagram. Still read-only | **M** | **The panel looks like the mockup.** This is the slice that answers "something nice done". |
-| **4** | Buttons on `/ace/`: Load / Park / Retract / Eject / Eject (force) per lane, the footer bar, the fault and jam banners — all with §4.3's predicates and verbatim reasons | **L** | **The console stops being necessary.** Every disabled control says why. |
-| **5** | Dryer and dry-roll controls on the strip; the prose paragraph moves into this document | **S** | Drying starts and stops from the panel. The dryer stops occupying a quarter of the page to say nothing. |
-| **6** | Patcher hardening: distinct return values, non-zero exit, `status.json`, corrected docstring — plus the panel's health pill (§5.3) | **XS** | A red pill when a Mainsail update breaks the nozzle dot, instead of fifteen minutes of silence and then nothing. |
-| **7** | Spool picker → `MMU_GATE_MAP` (§2.9) | **M** | Assigning a spool is a list with swatches and weights, not a command line named in four error messages. |
-| **8** | `manifest.webmanifest` + icon in `/ace/` (§5.4) | **XS** | An ACE icon on the phone home screen that opens standalone. |
-| **9** | KlipperScreen: the §3.3 screen — either by fixing `acepro.py` (the `TR` command that does not exist, the dead `ace_pro_control` lock) or by building it fresh to this layout | **M–L** | **The machine gains a control panel.** Today there is none: `acepro.py` has never been installed. |
-| **10** | Stub-or-hide pass on the 13 unimplemented `MMU_*` commands the Mainsail card sends (chapter 11 §2.9) | **M** | The Happy-Hare card stops offering buttons that error, and stops offering one that fails silently. |
+| **0** | `.theme/navi.json` — an `ACE` entry pointing at `/ace/` (§5.3) | **XS** | An **ACE item in Mainsail's sidebar**, on both instances, surviving every update. The panel stops being a URL you have to remember. Same day. |
+| **1** | **The action rail** (§2.12) bolted onto the *existing* panel, with the command manifest and the §4.3 predicates | **S–M** | **The first thing he can click.** Every message that says "run `MMU_RECOVER GATE=2`" becomes that button, with the sentence beside it. This lands before any restyling and it is the whole point of the panel. |
+| **2** | Lane controls: Load / Park / Retract / Eject / Eject (force) per lane, plus the recovery bar (`Audit`, `Recover`, `Clear op`, `Unlock`, `Reconcile`, `Clear suppression`) — with verbatim disabled reasons | **L** | **The console stops being necessary for the common path.** Every disabled control says why. `_ACE_SUPPRESSION_DISARM` stops being invisible. |
+| **3** | `ACE_STOP_ALL` (§4.5) + the `ACE_LANES` rewrite (§6.3), including the `.steps` crash that stops the dialog rendering during an eject | **S** | One control that stops everything, on both surfaces. The touchscreen dialog gains a Load button and one decisive line, and it appears during an eject instead of crashing. |
+| **4** | Truth pass: read `ace_staged_mm`; delete `laneState()`'s "in ACE, not fed"; fix the shared-run owner; draw entry=0/post=1 as a fault; render `enabled:false` as `sensor off`; drop `lane_empty` | **S** | The panel stops contradicting itself about lane 2, and the controls above stop being gated on a lie. |
+| **5** | The visual language: tokens, type, spacing, theme toggle, header + dryer strip, lane tiles as objects, hand-fed strip, the redrawn path diagram **as a lane selector** | **M** | **The panel looks like the mockup** — arriving on a surface that already does things. This is the "something nice done" slice, and it is fifth on purpose. |
+| **6** | Dryer and dry-roll controls; the dryer prose is deleted, not moved | **S** | Drying starts and stops from the panel, in one 44 px strip instead of a quarter of the page. |
+| **7** | Patcher hardening: distinct return values, non-zero exit, `status.json`, corrected docstring — plus the panel's health pill (§5.3) | **XS** | A red pill when a Mainsail update breaks the nozzle dot, instead of fifteen silent minutes. |
+| **8** | Spool picker → `MMU_GATE_MAP` (§2.9) | **M** | Assigning a spool is a list with swatches and weights, not a command line named in four error messages. |
+| **9** | KlipperScreen sufficiency pass: the §3.3 screen — either by fixing `acepro.py` (the `TR` command that does not exist, the dead `ace_pro_control` lock) or by building it fresh | **M** | **The machine gains a control panel at all.** Scoped to completeness, not richness. |
+| **10** | `manifest.webmanifest` + icon in `/ace/` (§5.4) | **XS** | An ACE icon on the phone home screen that opens standalone. |
+| **11** | Stub-or-hide pass on the 13 unimplemented `MMU_*` commands the Mainsail card sends (chapter 11 §2.9) | **M** | The Happy-Hare card stops offering buttons that error, and stops offering one that fails silently. |
 
-Slices 0–2 are a single session and all three are visible. Slice 3 is the one he asked for. Slices 4
-and 9 are the ones that change what the machine can do.
+Slices 0–1 are a single session, and slice 1 alone changes the panel's reason to exist. Slice 5 is
+the one that answers "I really insist on having something nice done" — deliberately after the panel
+has something to be nice *about*.
 
 ---
 
