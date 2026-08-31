@@ -1546,3 +1546,304 @@ has something to be nice *about*.
 ---
 
 **Ends.** The rendered proof is at [`examples/ace-panel-mockup/index.html`](../examples/ace-panel-mockup/).
+
+---
+
+## 9. The required control set, and the lane frame that carries it
+
+**Added 2026-08-31**, after the owner specified what the panel must let him do. His words:
+
+> *"The panel needs to give me the option to control not only lane load/unload/park at ACE edge, at
+> hub, at entry, at post / eject, also jog forward/back any lanes, trigger RFID find, RFID write,
+> show me clearly where the tips are in each lane, etc."*
+
+This is the acceptance test. **Can he do each of these, for any lane, without typing anything?** It
+supersedes any control set inferred earlier in this document; §4.3's table is extended by §9.4 rather
+than replaced.
+
+### 9.1 The organising decision: the lane is the object, the path is its state
+
+Four requirements — park-at-a-named-point, jog, RFID, and *"show me clearly where the tips are"* —
+collapse into one component if the lane tile stops being a status card with buttons bolted on and
+becomes a **path ladder you act on**.
+
+```
+ ┌─┬───────────────────────────────────────────────────────────┐
+ │▌│ ▪ T2  Bambu Lab Yellow PLA                    STAGED  ⌾RFID│
+ │▌│                                                            │
+ │▌│  edge ●━━━━━━━━━━━━━━━━━━━━━━━◐┄┄┄┄┄┄┄○ entry  ○ gears ○ melt│
+ │▌│       │                       │ 884 ±20                   │
+ │▌│  ┌────┴───┐ ┌──────┐ ┌───────┴┐ ┌──────┐ ┌──────┐          │
+ │▌│  │  edge  │ │ hub  │ │ entry  │ │ gears│ │ load │          │
+ │▌│  └────────┘ └──────┘ └────────┘ └──────┘ └──────┘          │
+ │▌│  jog  [ − ] [ + ]  step 25 mm      [ eject ]  [ tag ▾ ]    │
+ │▌│  50 mm short of the hub · reckoned, no sensor in this run  │
+ └─┴───────────────────────────────────────────────────────────┘
+```
+
+The ladder is the display requirement. The row of destination buttons sits **directly beneath the
+stop each one drives to**, so the control is spatially the same object as the state. Pressing `hub`
+means *move this tip to that mark*, and the mark is right above the button.
+
+### 9.2 Tip position, and the honesty constraint
+
+This is the hard part, and it is where the current panel already fails: it prints *"in ACE, not fed"*
+beside a diagram it draws 94.6 % full. **Position is derived, and it is only partially knowable.**
+Confidence is therefore a first-class visual property, not a footnote.
+
+Five landmarks, four segments, and each segment has a different epistemic status:
+
+| segment | bounded by | what is actually known |
+|---|---|---|
+| ACE edge → hub | lane feed telemetry, then `hub_detect` | reckoning from commanded length (`ace_staged_mm`), **confirmed at the far end** by a switch |
+| hub → entry | `hub_detect`, `toolhead_entry` | **no sensor anywhere in this run.** `ace_hub_encoder` counts pulses at the hub, so travel *through* the hub is measured, but nothing observes the tip once it is past |
+| entry → gears | `toolhead_entry`, `toolhead_postgear` | two switches ~18 mm apart; position within is reckoned but the run is short |
+| gears → melt | `toolhead_postgear`, nothing | **no switch at all.** `mmu.in_melt_zone` is *derived*, from state flags, not observed |
+
+Four confidence tiers, each drawn differently, and the drawing is not optional decoration — it is
+what stops the picture lying:
+
+| tier | when | drawn as | label |
+|---|---|---|---|
+| **measured** | a switch at that landmark is lit and enabled | solid 8 px fill up to a solid dot | the landmark name |
+| **reckoned** | commanded-length arithmetic, with a switch confirming which segment it is in | solid fill, then a **± band** in the lane colour at 45 % whose width is the stated tolerance | `884 ±20 mm` |
+| **inferred** | the tip is in a segment with no sensor and no encoder coverage | **hatched band spanning the entire segment**, no dot anywhere | `somewhere between hub and entry` |
+| **unknown** | `ace_buffer_watch.stale`, or a bounding sensor has `enabled == false` | whole ladder hatched in `--unknown` | `unknown` |
+
+Rules that follow, and they are absolute:
+
+1. **Never draw a dot in an inferred segment.** A dot is a claim of position. The band is the claim
+   the sensors actually support.
+2. **The ± band is drawn even when it is small.** Hiding it when the tolerance is 5 mm teaches the
+   reader that a solid edge means certainty, which then makes the 20 mm case unreadable.
+3. **A disabled sensor collapses both segments it bounds to *unknown*, not to *clear*.** Live today:
+   `toolhead_entry.enabled == false`, so the hub → entry and entry → gears runs are both unknown
+   right now, and the panel must say so.
+4. **`mmu.in_melt_zone` is labelled `derived` wherever it appears.** It is the only landmark with no
+   switch behind it, and it is the one that decides heat-versus-cold.
+5. **The tolerance is a stated number, not a vibe.** Until it is measured it is declared in the
+   panel's own constants and shown, so a wrong tolerance is visible and correctable rather than
+   invisible and believed.
+
+### 9.3 Destination controls
+
+Five landmarks; the operator gets a button per reachable one, on every lane.
+
+**Single-occupancy is the frequent, concrete instance of disabled-with-a-reason.** The hub and the
+shared run take one lane at a time. `park at hub` on T1 while T2 owns the hub is not an error to be
+discovered by pressing — it is a greyed button reading **`T2 is at the hub — retract it first`**.
+The same applies to `entry` and `gears`, and to `load`.
+
+Buttons never move between states; only their enablement, their label and their reason change
+(§2.1). A destination the machine has **no command for** is rendered disabled with the reason
+`no command exists for this destination yet` rather than omitted — an omission reads as "not
+possible on this machine", which is a different and wrong claim. §9.4 says which those are.
+
+### 9.4 Jog — the position, argued
+
+`ACE_RAW_FEED` and `FORCE_MOVE STEPPER=extruder` were the two most-typed commands in the sampled
+window, 17 each. The owner has now asked for jog by name, so **the question is no longer whether to
+expose it but how to protect it**, and this document takes a position rather than deferring.
+
+**The failure mode is specific.** Filament has been ground on this machine when *the ACE and the
+extruder moved out of step* — not because a jog was too long, and not because there was no
+confirmation dialog. So the protection must target that, and a confirm dialog does not.
+
+**The position: expose jog, protect it by segment ownership.**
+
+| protection | rule |
+|---|---|
+| **Mutual exclusion by segment** | The panel derives which actuator owns the tip's current segment and enables **only that one**. ACE-side jog is enabled while the tip is between the ACE edge and the gears; extruder-side jog is enabled only once post-gear is lit. **They are never both enabled**, and the disabled one states why: `the tip is in the ACE's segment — the extruder cannot reach it`. This is the standing segment-ownership rule made into an interlock. |
+| **Bounded step** | A step selector with fixed values — 1 / 5 / 25 / 100 mm. No free numeric entry, so no fat-fingered 1000. |
+| **No latching motion** | A press moves one step. Continuous motion requires press-and-hold, and releasing stops it. Nothing keeps moving after the finger leaves. |
+| **Gated like every other motion control** | `PATH_FREE`, `FRESH`, `NO_OP`, and not `EJECTING`. Jog is motion, and it obeys the same predicates as Load and Eject. |
+| **Never in an unknown segment** | If the tip's segment is *inferred* or *unknown* (§9.2), **both** jog directions are disabled with `the tip's position is not known — audit first`. Jogging blind is exactly how the two actuators get out of step. |
+| **A visible stop** | `STOP ALL` is on screen whenever jog is. |
+
+**Flagged for QA — two residual questions this design cannot settle:**
+
+1. **Does `ACE_RAW_FEED` bypass the preload guard?** If the raw commands are deliberately outside
+   `ace_preload_guard`'s command wrapping, then the panel's own predicates are the *only* guard on a
+   jog button, and a UI bug becomes a mechanical one. Whether that is acceptable, or whether jog
+   should be routed through a new guarded macro instead, is a QA call.
+2. **The one case where both actuators must move together** — feeding through the gears — is
+   deliberately **not offered** by this design. There is no synchronised jog control. If that gap
+   turns out to matter in practice, the answer is a purpose-built macro that owns the
+   synchronisation, not two buttons and a steady hand.
+
+### 9.5 RFID
+
+Two controls, per the request:
+
+- **`Find` (scan)** — `ACE_SCAN_TAGS`, already registered and working; it is in the `ACE_LANES`
+  footer today and nowhere else. It is a whole-unit operation, not per-lane, so it lives in the
+  header rather than in a tile. **It publishes no status object**, so the panel cannot show progress:
+  it shows an in-flight state for a fixed interval, then re-reads the slots. That limitation is
+  stated in the UI (`scanning… results appear in the lanes`), not hidden.
+- **`Write`** — per-lane, and only where a tag is present (`ace_instance_0.slots[i].rfid`). A write
+  changes physical media and is irreversible in the way a config edit is not, so it keeps a confirm
+  step naming what will be written to which spool. **This is friction being added deliberately, and
+  it is the one place in this document where that happens.**
+
+Both sit behind a `tag ▾` split control in the tile so they cost one row, not two.
+
+### 9.6 Hand-fed gates 4–5 — what must be absent
+
+`mmu.manual_tools == [4,5]`. The machine has **no actuator** on these lanes: it cannot load, park,
+eject or jog them. Therefore:
+
+- The destination row, the jog row, `Load` and `Eject` are **absent**, not disabled — there is no
+  state in which they could become available, and a permanently greyed control is noise.
+- What remains: presence, material, spool, `Assign spool…`, and `Write tag` if a tag is present.
+- The strip states why in one line: `hand-fed — the machine cannot move these lanes`.
+
+This is the one place where *absent* beats *disabled-with-a-reason*: the rule exists so a control
+that could work in another state is not hidden. Here no such state exists.
+
+### 9.7 Target sizes, restated for the card
+
+The dashboard card is a **pointer** surface at ~600 × 400 (§5.0.2), and the tile is ~285 × 165. The
+destination chips are 28 px tall.
+
+- **In-card, minimum target 28 × 28 px** — clears WCAG 2.2 SC 2.5.8 (Target Size Minimum, AA,
+  24 × 24). Stated so it is a decision and not an accident.
+- **Phone and KlipperScreen: 48 × 48**, unchanged. There the destination row wraps to two rows of
+  three and the tile is taller, because a thumb is not a mouse.
+
+---
+
+## 10. The dryer as a control region
+
+**Added 2026-08-31.** *"Also need full integrated dryer support with the various modes, with the
+proper guards in place."*
+
+The dryer is the clearest instance of the failure this whole chapter exists to fix: the current card
+spends four large numbers and a paragraph of prose on it and **cannot start or stop anything**. It is
+display without control, and the numbers earn their pixels only as the basis for the button beside
+them.
+
+### 10.1 The real command set, enumerated from `ace.cfg` rather than assumed
+
+| Command | Definition | Parameters | What it does |
+|---|---|---|---|
+| `ACE_DRY` | `ace.cfg:193` | `MATERIAL=` **or** `TEMP=` / `MINUTES=` | One-shot. Resolves the preset, then calls `ACE_START_DRYING TEMP={t} DURATION={m}`. Defaults 45 °C / 120 min with no preset. |
+| `ACE_AUTODRY` | `ace.cfg:218` | `MATERIAL=` **or** `TARGET_RH=` / `TEMP=` / `INTERVAL=` | Humidity hold. Sets four runtime variables **and persists all four** to `save_variables`, then arms `_ACE_AUTODRY_TICK`. Defaults 20 %RH / 45 °C / 10 min. |
+| `ACE_DRY_OFF` | `ace.cfg:~205` | none | **Stops both.** Clears the runtime `active`, clears `ace_autodry_active`, cancels the tick, calls `ACE_STOP_DRYING`. |
+| `ACE_DRY_PRESETS` | `ace.cfg:~185` | none | Prints the table to the console. |
+| `ACE_AUTODRY_STATUS` | `ace.cfg:253` | none | Prints controller state to the console. |
+| `_ACE_DRY_PRESETS` | `ace.cfg:166` | — | Storage only. `variable_table`, readable live as `printer["gcode_macro _ACE_DRY_PRESETS"].table`. |
+
+**`ACE_DRY_OFF` stops auto-dry as well as the heater.** A `Stop drying` button that silently disarms
+a humidity hold he set yesterday is a surprise, so the control is labelled with what it does:
+`Stop drying` with the meta line `also cancels auto-dry`.
+
+**The presets are live data, not a hard-coded list.** Eight materials, read at render time from
+`_ACE_DRY_PRESETS.table`:
+
+```
+PLA  45 °C  20 %  240 min      TPU  45 °C  15 %  300 min
+PETG 55 °C  20 %  240 min      PA   55 °C  10 %  480 min
+ABS  55 °C  15 %  240 min      PC   55 °C  10 %  360 min
+ASA  55 °C  15 %  240 min      PVA  45 °C  15 %  240 min
+```
+
+The panel renders whatever is in that table. Adding a material to the config adds a chip; nothing in
+the UI hard-codes a material name or a temperature.
+
+**No free-text temperature field, anywhere.** The config's own comment says why: *"Capped at 55C: the
+driver permits 60 but 55 is what is proven here."* A number he can type is a number he can type
+wrong, and the filament pays. The panel offers preset chips and nothing else. The advanced form in
+the fullscreen variant offers the same chips plus a duration stepper — **still no free temperature**.
+
+### 10.2 One sensor, five readers — and they already disagree
+
+Five objects report the same physical HTU21D. Queried live, in one call, 2026-08-31:
+
+| object | temperature | humidity |
+|---|---|---|
+| `htu21d ace_temp` | 28.0 | 22.0 |
+| `temperature_ace ace_temp` | 28.0 | 22.0 |
+| `ace_humidity_display ace_temp` | 28.0 | 22.0 |
+| `temperature_sensor ace_temp` | 28.0 | **absent** |
+| **`ace_instance_0`** | **28** | **23** |
+
+**They do not agree.** Four read 22 %; `ace_instance_0` reads 23 %. The first four are Klipper-side
+reads of the HTU21D; `ace_instance_0` carries the value the ACE itself reports over RS485. Different
+sample, different rounding, same physical sensor. A panel that shows one while the machine acts on
+the other is the §2.1 lie in a new costume, and this time it is a whole percentage point at the exact
+threshold the controller compares against.
+
+**Decision: the panel reads `ace_instance_0.temp` and `ace_instance_0.humidity`, everywhere.**
+
+The reason is not precision, it is agreement: `_ACE_AUTODRY_TICK` reads `a.humidity` from
+`ace_instance_0`. **That is the number the controller decides on**, so it is the number that explains
+why the dryer just switched on. Showing 22 while the hold is triggering at 23 would make the panel
+contradict the machine's own decision — which is the exact class of bug being removed, not
+introduced. `temperature_sensor ace_temp` is disqualified outright: it publishes no humidity at all.
+
+### 10.3 The dryer region
+
+**Unit-level, not per-lane.** It has one heater and one box; it must never be drawn as a fifth lane
+or placed in the lane grid. It gets its own strip.
+
+**In-column (~600 × 400 card) — the compact form, and it is genuinely compact:**
+
+```
+ DRYER   auto-dry · holding ≤ 20 %      23 %RH  ▸ 20      45 °C      [ stop ]
+         ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░  3 % above target
+```
+
+44 px, one row plus a 4 px progress rule. Exactly three things, because **the single figure that
+changes a decision is progress toward target** — everything else is scenery at card size:
+
+1. **Which mode is running**, and its target (`auto-dry · holding ≤ 20 %` / `one-shot · 45 °C`).
+2. **The one live figure**: current RH against target for auto, remaining time for one-shot.
+3. **Start or stop.** Idle shows a `dry ▾` split control whose menu is the preset chips; running
+   shows `stop`.
+
+Everything else — preset editing, duration steppers, the timed-vs-hold explanation, absolute
+humidity, history — lives in the fullscreen variant. **Start, stop, mode and target are reachable
+in-column**, because a dry he cannot start from the dashboard is a dry he types.
+
+**Fullscreen / `/ace/` direct — the roomy form:** the same strip, plus the eight preset chips
+inline, a duration stepper for one-shot, absolute humidity (Magnus, already implemented) with its
+`(i)` explanation, and the auto-dry parameters (hysteresis, interval) as read-only text with an
+`edit` that re-issues `ACE_AUTODRY`.
+
+### 10.4 Guards
+
+| Guard | Rule | Reason string |
+|---|---|---|
+| **Heater fault** | `dryer_status.status == "error"` ⇒ **a `--fault` banner, never a "drying" pill.** The banner carries `state_detail` verbatim, and says the hold has been dropped. `_ACE_AUTODRY_TICK` sets `active = 0` and reports `ACE auto-dry ABORTED: dryer reports {state_detail}` — the panel must show the abort, not the intent. | banner: *"Dryer fault: {state_detail}. Heating has stopped and the humidity hold has been cancelled."* |
+| **Disconnected** | `connection_state != "connected"` ⇒ every dryer control disabled | `the ACE is disconnected` |
+| **No reading** | `ace_instance_0.humidity` is null/undefined ⇒ auto-dry start disabled; the tick itself already refuses on this | `no humidity reading — auto-dry cannot hold a target it cannot measure` |
+| **Already running** | `Dry` disabled while `dryer_status.status != "stop"` | `the dryer is already running` |
+| **Auto-dry already holding** | `Auto-dry` disabled while `ACE_AUTODRY.active == 1` | `auto-dry is already holding ≤ {target_rh} %RH` |
+| **Stop is never disabled** while anything is running | `Stop drying` enabled whenever `status != "stop"` **or** `active == 1` | — |
+| **Runtime vs persisted disagreement** | `ACE_AUTODRY.active` (RAM) is the truth for *is it holding now*; `save_variables.ace_autodry_active` is the recorded *intent*. When they differ, the strip shows `--staged` text: *"auto-dry was armed but is not running — a Klipper restart drops the hold"* | — |
+
+That last row is not hypothetical. `ACE_AUTODRY`'s own comment records it: *"gcode_macro variables
+live in RAM and reset on every Klipper restart... Happened five times on 2026-08-21 during unrelated
+deploys; the visible symptom was a dry that 'finished' 8 % RH above target."* `_ACE_AUTODRY_RESUME`
+exists to repair it — and the window between the restart and the resume is exactly when a panel
+showing the persisted value alone would lie.
+
+### 10.5 Two decisions recorded, not invented
+
+**The drying rotisserie stays off the panel.** `ACE_DRYROLL_START` / `ACE_DRYROLL_MODE` are removed
+from §4.3's control table by this section. The reason: **it commands lane motion, and it is blocked
+by QA and must never run during a print.** Exposing dryer controls invites starting the roller
+alongside them, and a control that can move filament mid-print does not belong on a card he clicks
+while a print is running. If a safe gated form is wanted, it goes to QA as a proposal — it does not
+ship on a UX judgement. *(This deletes a control this document previously specified. Prefer removing
+to adding.)*
+
+**Drying during a print is not gated by this design, and the question goes to QA.** The evidence:
+`_ACE_AUTODRY_TICK` contains **no print-state check at all**, unlike `_ACE_DRYROLL_BODY`, which has
+three. Auto-dry is running on the machine right now and the machine prints. So the existing,
+deliberate behaviour is that drying continues through a print, and inventing a gate here would
+contradict the controller rather than guard it. **What is flagged to QA:** whether starting a
+*one-shot* 55 °C dry while a lane is loaded and feeding is different from a 45 °C auto-dry burst, and
+whether that case wants a gate. Until answered, the panel gates neither and never gates `Stop`.
+
+---
