@@ -15,7 +15,7 @@ The driver's map is confirmed for 129/130/131/132/135 and **contradicted in prac
 |---|---|---|---|
 | **129** | `feed_error` | `0x0800A28E` | After a **commanded feed** completes, the encoder-deficit check had tripped. |
 | **130** | `rollback_error` | `0x0800A31E` | Same test after a rollback — but **unreachable**, see below. |
-| **131** | `assist_error` | `0x0800A4EC`, `0x0800A62A` | **Both buffer limit switches asserted at once.** Nothing to do with the encoder. |
+| **131** | `assist_error` | `0x0800A4EC`, `0x0800A62A` | **Both buffer limit switches asserted at once.** Nothing to do with the encoder. Measured in the field at **~1 s** after the toolhead stops pulling — not the 4000 ms timer. |
 | **132** | `preload_error` | `0x0800AB94`, `0x0800ACCC` | The same deficit trip as 129, observed during auto-preload. |
 | **133** | `stuck_error` | `0x08009E88` | Deficit tripped while `CHN_BUF_FEED` was **inactive**. |
 | **134** | `tangled_error` | `0x08009E8E` | Deficit tripped while `CHN_BUF_FEED` was **active**. |
@@ -188,6 +188,13 @@ A third contributor: there are **two op channels**, and feed assist holds one in
 polling loop that exits only when the slot leaves the assist state, or after 4000 ms with no
 movement). With assist active, only one channel remains and a concurrent request is refused at once
 — which is why the driver already notes empirically that "feed assist causes busy".
+
+> This is also the mechanism behind a rejection hosts hit for a different reason. The ACE 2 toggles
+> a slot between `assisting` and `ready` depending on whether the toolhead is pulling right now, so
+> `ready` on an armed slot means *armed but idle*, not *disarmed* (hakimio's finding). A host that
+> re-arms on `ready` fires `start_*_assist` ~4×/sec, each one contending for the single channel the
+> running assist has not taken — and gets `FORBIDDEN` (code 2). See
+> [05-protocol-notes.md](05-protocol-notes.md).
 
 > **Actionable for any host:** after a STOP, **poll `GET_STATUS` until the slot status returns to
 > 0** instead of assuming it took effect. And do **not** issue a STOP within ~250 ms of the

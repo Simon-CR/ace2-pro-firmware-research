@@ -26,6 +26,7 @@ and the very ability to flash anything at all came from his analysis. If you fin
 useful, go read his material first — it is the primary source:
 
 - [ACE2 firmware analysis, protocol shell, `.proto`, OTA updater, feed-check notes](https://gist.github.com/hakimio/4916ff69add458fdc51aeea76f21efb9)
+- [`SnapmakerU1-Extended-Firmware`, branch `ace-2`](https://github.com/hakimio/SnapmakerU1-Extended-Firmware/tree/ace-2) — a working ACE 2 driver, and the source of three corrections made here on 2026-08-31
 - [hakimio's GitHub](https://github.com/hakimio)
 
 Also essential, and likewise not ours:
@@ -106,14 +107,15 @@ Moving the authentication and decode **into** the firmware — filling the norma
 | [docs/08-motion-and-preload.md](docs/08-motion-and-preload.md) | Motors, the autonomous preload and its hardcoded bounds, length accounting, and the feed-check slip comparator |
 | [docs/09-error-states-and-jam-detection.md](docs/09-error-states-and-jam-detection.md) | The seven error states, what jam detection really measures, when it is switched off, and the solved post-STOP window |
 - [10. Spool drive and feed telemetry](docs/10-spool-drive-and-feed-telemetry.md) — the spool and feed gears share one motor (proven); `magnitude_mm` is the motor, `moved_mm` is the filament
+| [docs/11-operator-interface.md](docs/11-operator-interface.md) | **The unit has no controls of its own** — so the Klipper front-end *is* the control panel. What the panels get wrong, what the operator still has to type, and the card the ACE should have |
 | [examples/README.md](examples/README.md) | Installing the Klipper extra, and G-code usage |
 
 ## Using it
 
 **Start here:** [examples/README.md](examples/README.md) — installing the Klipper extra that
 provides `ACE_RAW_CMD`, and G-code examples for reading a tag's UID, clearing a lane's cached
-record, selecting and dumping a tag, parking a tag by rotating the lane, and the undocumented
-rollback-assist feed mode.
+record, selecting and dumping a tag, parking a tag by rotating the lane, and the rollback-assist
+feed mode that the mainline ACEPRO driver cannot send.
 
 Nothing in this repository works without the extra in `klipper/`, so install that first.
 

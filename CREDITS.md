@@ -24,8 +24,23 @@ What he produced, and what we relied on directly:
   his map.** When we needed `sub_800DEB6`, `sub_800E18C` or the IAP handlers, we knew where to
   look because he had already charted the territory.
 - **`feed-check.txt`** — the check_length/error_length analysis.
+- **`FEED_OR_ROLLBACK` mode 3 (rollback / unwind assist) — his, not ours.** He shipped
+  `FEED_MODE_UNWIND_ASSIST = 3` with a working `unwind_assist` method in `ace2_protocol.py` on
+  **2026-08-09**, nineteen days before this repository's first commit. We found the mode
+  independently in the disassembly and, until 2026-08-31, wrote it up as though nobody sent it.
+  That was wrong and has been corrected in place. What remains ours is the *semantics* — that
+  `speed` and `length` are discarded, that **BUF_BACK** is the stop condition, and the admission
+  table — not the mode.
+- **Two field observations that corrected our own documents**, both from his driver comments:
+  `ASSIST_ERROR` arrives **~1 s** after the toolhead stops pulling (we had been foregrounding the
+  MCU's 4000 ms limit, wrong by ~4×), and slot status **`ready` means "armed but idle"** because the
+  ACE toggles `assisting` ↔ `ready` with the toolhead's pull — so re-arming on `ready` spams
+  `start_*_assist` until the device answers `FORBIDDEN`.
 
 His material: <https://gist.github.com/hakimio/4916ff69add458fdc51aeea76f21efb9>
+
+His ACE 2 driver: <https://github.com/hakimio/SnapmakerU1-Extended-Firmware/tree/ace-2>
+(`overlays/firmware-extended/39-ace-support/`)
 
 A concrete illustration of the debt: we spent a long stretch convinced patched images were being
 rejected for their *size*. The actual answer — an 8-byte magic trailer checked by the IAP task —
@@ -74,5 +89,12 @@ To be precise about the boundary, the following were established here:
 - **Full Bambu tag decryption performed by the ACE**, and the proof from the access bits that
   **Bambu tags are permanently read-only**.
 - That slots 2 and 3 **share one antenna** which can see both bays simultaneously.
+- The **assist-mode semantics**: that `speed` and `length` are discarded by the handler (hardcoded
+  to unbounded and 50 mm/s), that **BUF_RST stops mode 2 and BUF_BACK stops mode 3**, that both
+  assists run unbounded on a strand nothing holds, and the state-admission table for
+  `FEED_OR_ROLLBACK`. **The existence of mode 3 is explicitly not on this list** — see above.
+- That `assist_error` (0x83) is set by **both buffer switches asserting at once**, which is the
+  mechanism behind the ~1 s figure hakimio measured, and that the MCU's 4000 ms limit is a separate
+  later backstop rather than the working deadline.
 
 Everything else is someone else's work, gratefully used.

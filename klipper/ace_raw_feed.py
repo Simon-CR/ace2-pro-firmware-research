@@ -3,6 +3,10 @@
 #   ACE_RAW_STOP T=<tool>                                     -> STOP_FEED_OR_ROLLBACK
 #   ACE_RAW_CMD T=<tool> CMD=<name> [KEY=value ...]            -> any command; index defaults to T's slot
 # FEED_OR_ROLLBACK modes: 0 feed, 1 rollback, 2 feed-assist, 3 rollback-assist (measured).
+# Mode 3 is hakimio's FEED_MODE_UNWIND_ASSIST, not a discovery here; the mainline ACEPRO driver
+# has no reverse assist, which is the reason this command exists.
+# Assist modes ignore SPEED and LENGTH, and the device raises ASSIST_ERROR ~1 s after the toolhead
+# stops pulling -- issue ACE_RAW_STOP within about a second, not within the MCU's 4 s backstop.
 import json
 import logging
 from .ace.config import get_instance_from_tool, get_local_slot

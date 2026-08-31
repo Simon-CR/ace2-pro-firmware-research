@@ -168,7 +168,15 @@ Practical consequence: **if your extruder retracts faster than 50 mm/s, the ACE 
 slack accumulates instead of being taken up.
 
 There is also an **MCU-side continuous-assist limit of 4000 ms**, after which the firmware takes an
-error path — tighter than, and independent of, any host-side tangle timer.
+error path — independent of any host-side tangle timer.
+
+> **Correction (2026-08-31): do not size anything against that 4 s.** This section used to present
+> the 4000 ms limit as the assist deadline. It is not the one that fires in practice. hakimio's
+> field observation is that the ACE 2 raises `ASSIST_ERROR` **~1 s** after the toolhead stops
+> pulling, and §6 below explains why by our own route: the `CHN_BUF_FEED == 1 && BUF_BACK == 1`
+> double-assert sets **0x83** long before the timer expires. The 4000 ms path only decides the
+> outcome when the buffer never double-asserts — a free strand. **Design against ~1 s.** See
+> [05-protocol-notes.md](05-protocol-notes.md).
 
 A genuine `length == 0` on a *feed* or *rollback* is different: it yields zero steps and the move
 terminates on the first capture pulse — a no-op that still emits the completion event.
@@ -195,7 +203,10 @@ terminates on the first capture pulse — a no-op that still emits the completio
 2. **INSERT falling** → stop, when the lane is FEEDING/ROLLBACK or in error 0x81/0x82.
 
 The filament task also polls the buffer sensors: `CHN_BUF_FEED == 1 && BUF_BACK == 1` runs a motion
-helper and then sets the slot to **0x83 (ASSIST_ERROR)**.
+helper and then sets the slot to **0x83 (ASSIST_ERROR)**. **This is the assist deadline that
+actually fires** — with the toolhead stopped and the ACE still feeding, the buffer double-asserts in
+well under a second, which matches hakimio's measured ~1 s to `ASSIST_ERROR`. The 4000 ms timer in
+§5 is a later backstop, not the working limit.
 
 ---
 

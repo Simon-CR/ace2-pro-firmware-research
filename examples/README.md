@@ -28,7 +28,7 @@ It provides three commands:
 | command | purpose |
 |---|---|
 | `ACE_RAW_CMD T=<tool> CMD=<name> [KEY=value ...]` | send any ACE command; this is the one the patches use |
-| `ACE_RAW_FEED T=<tool> MODE=<0..3> [SPEED=] [LENGTH=]` | `FEED_OR_ROLLBACK` with an explicit mode, including the undocumented mode 3 |
+| `ACE_RAW_FEED T=<tool> MODE=<0..3> [SPEED=] [LENGTH=]` | `FEED_OR_ROLLBACK` with an explicit mode, including mode 3, which the ACEPRO driver cannot send |
 | `ACE_RAW_STOP T=<tool>` | `STOP_FEED_OR_ROLLBACK` |
 
 Motion, heater and configuration commands are rejected by `ACE_RAW_CMD` on purpose; use the
@@ -121,7 +121,7 @@ Repeat until it answers, then **stop** — the tag is parked in the field and yo
 time pressure. Allow ~600 mm for a full revolution of a 1 kg spool. Restore the lane position
 afterwards with the opposite mode.
 
-## Rollback-assist (mode 3) — the undocumented feed mode
+## Rollback-assist (mode 3) — the feed mode the ACEPRO driver cannot send
 
 ```gcode
 ACE_RAW_FEED T=0 MODE=3                        ; arm rollback-assist
@@ -132,14 +132,30 @@ ACE_RAW_STOP T=0                               ; stop
 Mode 3 rewinds until the strand goes taut, waits, and resumes when slack appears — so the ACE can
 only take up, never push, and no pacing between the two motors is needed.
 
+> **Correction (2026-08-31).** This section used to call mode 3 "the undocumented feed mode", which
+> implied it was found here. It was not. **[hakimio](https://github.com/hakimio) shipped
+> `FEED_MODE_UNWIND_ASSIST = 3` with a working `unwind_assist` on 2026-08-09**, weeks before this
+> repository existed. What is still true is narrower and is why this example is worth keeping: the
+> mainline [Kobra-S1/ACEPRO](https://github.com/Kobra-S1/ACEPRO) driver has no reverse assist, so on
+> a stock install `ACE_RAW_FEED` is the only way to reach mode 3. See
+> [docs/05-protocol-notes.md](../docs/05-protocol-notes.md).
+
 **The `SPEED` argument is ignored for assist modes.** The handler hardcodes 50 mm/s and an
 unbounded length (`0x0800A324`). So keep extruder retraction **below 50 mm/s** — faster than that
-and the ACE cannot keep up, and slack builds instead of being taken up. Note also an MCU-side
-**4-second continuous-assist limit** before the firmware takes an error path.
+and the ACE cannot keep up, and slack builds instead of being taken up.
 
-**Two rules:** enter it only from `ready` (stop any running assist first), and make **no forward
-extruder move while it is armed** — pushing creates slack, the ACE immediately rewinds it, and the
-feeder fights the nip. See [docs/05-protocol-notes.md](../docs/05-protocol-notes.md).
+⚠️ **Disarm within ~1 s of the toolhead going idle.** An earlier version of this page pointed at the
+MCU's 4-second continuous-assist limit; that is the wrong number to build a macro around. The ACE 2
+raises `ASSIST_ERROR` about **one second** after the toolhead stops pulling — the motor keeps
+pushing until the filament buckles. If you wrap mode 3 (or mode 2) in a macro, the `ACE_RAW_STOP`
+belongs within a second of the last extruder move, not four.
+
+**Three rules:** enter it only from `ready`; make **no forward extruder move while it is armed** —
+pushing creates slack, the ACE immediately rewinds it, and the feeder fights the nip; and **do not
+re-arm because the slot reports `ready`** — the ACE toggles `assisting` ↔ `ready` according to
+whether the toolhead is pulling this instant, so `ready` on a slot you already armed means *armed
+but idle*. Re-arming on it spams `start_*_assist` until the device answers `FORBIDDEN`. Track what
+you armed on the host.
 
 ---
 

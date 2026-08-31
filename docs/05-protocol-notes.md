@@ -10,11 +10,31 @@ with the [Kobra-S1/ACEPRO](https://github.com/Kobra-S1/ACEPRO) driver.
 | 0 | `feeding` | 1 | `ACE_FEED` | `length` mm forward at `speed` |
 | 1 | `unwinding` | 2 | `ACE_RETRACT` | `length` mm backward |
 | 2 | `assisting` | 3 | `ACE_ENABLE_FEED_ASSIST` | open-ended; feeds when the buffer is pulled |
-| 3 | **`rollback_assisting`** | 4 | **nobody** | open-ended; rewinds until the strand goes taut |
+| 3 | **`rollback_assisting`** | 4 | hakimio's `unwind_assist` — **not** the mainline ACEPRO driver | open-ended; rewinds until the strand goes taut |
 
-Mode 3 is a first-class device state that the driver never uses — the decoder string exists but
-has no caller. Confirmed on hardware: the device answers `SUCCESS` and the slot reports
-`rollback_assisting`.
+**Correction (2026-08-31): mode 3 is not our discovery.** An earlier version of this document put
+"**nobody**" in the *sent by* column and called it a device state no driver uses. That was wrong,
+and the priority is not ours. **[hakimio](https://github.com/hakimio) shipped it first:** his
+`ace-2` branch defines `FEED_MODE_UNWIND_ASSIST = 3` and a working `unwind_assist` method in
+[`ace2_protocol.py`](https://github.com/hakimio/SnapmakerU1-Extended-Firmware/blob/ace-2/overlays/firmware-extended/39-ace-support/root/usr/local/share/ace_device/ace2_protocol.py),
+committed **2026-08-09** — nineteen days before this repository's first commit. We found mode 3
+independently in the disassembly, but we were not first and should never have implied otherwise.
+
+What survives the correction, stated narrowly:
+
+- **It is still absent from the mainline [Kobra-S1/ACEPRO](https://github.com/Kobra-S1/ACEPRO)
+  driver.** Verified: that project's `PROTOCOL.md` documents `start_feed_assist` and
+  `stop_feed_assist` and nothing else — it has no reverse assist. On a stock ACEPRO install mode 3
+  is unreachable, which is the reason `ACE_RAW_FEED` exists in this repository.
+- **Our contribution is the semantics, not the mode's existence:** that `speed` and `length` are
+  ignored, that **BUF_BACK** is the stop condition, the admission table below, and what the mode
+  does on a strand nothing is holding.
+
+Corroboration running the other way, from his side to ours: hakimio sends `UNWIND_ASSIST_SPEED = 0`
+with every `unwind_assist` and still gets motion. A commanded speed of zero producing movement is
+independent field evidence for the firmware finding below — the parameter never reaches the motor.
+
+Confirmed on hardware here: the device answers `SUCCESS` and the slot reports `rollback_assisting`.
 
 **Handler validation** (`0x0800B578`): `index ≤ 3`, `speed ≤ 100`, `mode ≤ 3`, else PARAM_ERROR.
 So speeds above 100 are impossible and modes 4+ do not exist.
@@ -31,6 +51,30 @@ compatible state:
 Reading: mode 3 is the exact mirror of mode 2. Under rollback-assist an explicit rollback is
 admitted and a feed refused, and vice versa. Neither assist can be entered while the other is
 running — stop first. Error states admit everything, which is how recovery moves get through.
+
+### Correction (2026-08-31): `ready` does not mean "assist is off"
+
+The table above keys admission on `ready`, and as written it invites the reading "the slot says
+`ready`, so no assist is running, so it is safe to arm one". **That reading is wrong**, and the
+table was misleading because of it.
+
+Per hakimio's driver, the ACE 2 toggles a slot between `assisting` and `ready` according to whether
+the toolhead is pulling on the filament **right now**. On a slot whose assist you already started,
+`ready` means **armed but idle** — the assist is still live, it simply has nothing to do this
+instant. A host that treats `ready` as "disarmed" and re-arms on it fires `start_*_assist` roughly
+**4×/sec**, and the device eventually answers `FORBIDDEN` (code 2).
+
+Our own finding supplies the mechanism for that rejection: there are **two operation channels**, and
+an active assist holds one indefinitely (see
+[09-error-states-and-jam-detection.md](09-error-states-and-jam-detection.md) §6). Every re-arm
+contends for the single channel left, and once one request is in flight the next is refused at once.
+The `FORBIDDEN` is not the device objecting to the mode — it is the channel still being held by the
+assist the host has forgotten it started.
+
+**So track assist state on the host, and do not infer it from slot status.** Re-arm only on an
+explicit stop, on an error state, or on a deliberate direction change (feed ↔ rollback). The
+admission table stays correct as a statement about *what the firmware accepts*; it is not a
+statement about what is currently running.
 
 ## Buffer gating: the in-line buffer is a *stop* condition
 
@@ -72,9 +116,32 @@ The practical consequence is real, though: **if the extruder retracts faster tha
 cannot keep up**, and slack will build rather than being taken up. Keep extruder retraction below
 that.
 
-There is also an **MCU-side continuous-assist limit of 4000 ms** (`0x0800A40C`, comparing
-`cont_assist_time` at `0x200014CC`), after which the firmware takes an error path. That is tighter
-than, and independent of, any host-side tangle timer.
+### Correction (2026-08-31): assist error arrives in about a second, not four
+
+An earlier version of this document foregrounded the **MCU-side continuous-assist limit of 4000 ms**
+(`0x0800A40C`, comparing `cont_assist_time` at `0x200014CC`) as the number to design against. The
+limit is real, but putting it first was wrong by roughly **4×**, and anything sized against it is
+sized too loose.
+
+The number that matters is **~1 s**. hakimio's field observation, in his driver comments, is that the
+ACE 2 emits `ASSIST_ERROR` about **one second after the toolhead stops pulling** — the motor keeps
+pushing filament into the tube until it buckles. His driver disarms assist on an idle timeout
+specifically to beat that.
+
+Our own disassembly predicted the same thing by a different route, which is why the two agree: the
+filament task polls `CHN_BUF_FEED == 1 && BUF_BACK == 1` — **both** buffer switches asserted at once
+— runs a motion helper, and sets the slot to **0x83 (ASSIST_ERROR)** (see
+[08-motion-and-preload.md](08-motion-and-preload.md) §6 and
+[09-error-states-and-jam-detection.md](09-error-states-and-jam-detection.md)). With the extruder
+stopped and the ACE still feeding, the buffer reaches that double-assert in well under a second of
+continued motion.
+
+**The buffer double-assert is the live path; the 4000 ms timer is a separate, later backstop.** The
+timer only decides the outcome where the buffer never double-asserts at all — a free strand, a
+disconnected bowden, an open idler. In normal operation it never gets the chance to fire.
+
+**Design against ~1 s:** disarm assist within about a second of the toolhead going idle, and treat
+4 s as the outer bound for the free-strand case only.
 
 Conversely, **no forward extruder move while mode 3 is armed** — pushing creates slack, the ACE
 immediately rewinds it, and the feeder fights the nip.
