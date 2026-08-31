@@ -812,7 +812,7 @@ function renderCard(){
      '<span class="btn sm"'+(C.mid.enabled?"":' aria-disabled="true" tabindex="-1"')+
        ' data-gcode="'+esc(C.mid.gcode)+'" role="button" title="'+esc(C.mid.reason)+'">'+esc(C.mid.label.split(" ")[0])+'</span>'+
      '<span class="btn sm destructive"'+(C.eject.enabled?"":' aria-disabled="true" tabindex="-1"')+
-       ' data-gcode="'+esc(C.eject.gcode)+'" role="button" title="'+esc(C.eject.reason||C.eject.caution)+'">'+
+       ' data-gcode="'+esc(C.eject.gcode)+'" role="button" title="'+esc(C.eject.reason||C.eject.caution||"")+'">'+
        esc(C.eject.label.replace(" (force)","!"))+'</span>'+
    '</div>'+
    '<div class="t-reason" style="height:15px;overflow:hidden">'+
@@ -1050,7 +1050,7 @@ function renderKs(){
      '" role="button" title="'+esc(primary.reason)+'">'+esc(primary.label.split(" ")[0])+'</span>'+
    '<div style="height:8px"></div>'+
    '<span class="btn destructive" style="min-height:52px"'+(C.eject.enabled?"":' aria-disabled="true" tabindex="-1"')+
-     ' data-gcode="'+esc(C.eject.gcode)+'" role="button" title="'+esc(C.eject.reason||C.eject.caution)+'">'+
+     ' data-gcode="'+esc(C.eject.gcode)+'" role="button" title="'+esc(C.eject.reason||C.eject.caution||"")+'">'+
      esc(C.eject.label.replace(" (force)"," !"))+'</span>'+
    '<div class="t-reason" style="font-size:10.5px;line-height:13px;height:26px;overflow:hidden;margin-top:3px">'+
      esc(!primary.enabled?primary.reason:(C.eject.caution||""))+'</div>'+

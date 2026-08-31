@@ -86,6 +86,24 @@ It found a real bug on its first run: `Load` stayed enabled while an orphaned st
 toolhead, because with `current_index = -1` no lane-named reason applied. Fixed, and the test now
 holds it.
 
+## The render check
+
+`acceptance.js` proves the control *logic*; `render-check.js` proves the *markup* that logic
+produces.
+
+```
+node render-check.js
+```
+
+It renders all four artboards in all eleven states — 44 renders — and asserts balanced tags, no
+stray `undefined` / `NaN` / `[object Object]`, and that **every element styled as a control carries a
+target** (`data-gcode`, `data-lane`, `data-step` or `data-door`). That last rule is the mockup's
+version of the standing no-dead-buttons rule: a button with nothing behind it cannot survive here
+either.
+
+It also earned its keep immediately, catching `title="undefined"` on every enabled Eject in the card
+and touchscreen artboards.
+
 ## Known limits of the drawing
 
 The ladder is drawn **to true scale** over 1590 mm, so `entry`, `gears` and `melt` genuinely cluster
