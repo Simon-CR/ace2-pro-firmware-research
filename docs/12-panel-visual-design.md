@@ -1133,10 +1133,117 @@ Size: XS. It is a prerequisite for the touchscreen's most important button.
 
 ## 5. Delivery
 
+### 5.0 The placement question is already answered — verified 2026-08-31
+
+The owner asked for the panel to be *"integrated as a card inside the Klipper web UI directly"*
+rather than a separate URL. **It already is.** Verified read-only against the live machine:
+
+```
+GET http://10.49.9.130:7125/server/webcams/list
+{ "name": "ACE Panel", "enabled": true, "service": "iframe",
+  "stream_url": "/ace/", "snapshot_url": "/ace/",
+  "aspect_ratio": "4:3", "location": "printer", "source": "database",
+  "uid": "bb4cd0ee-e7c7-40db-ad99-98a0c7bb30ed" }
+```
+
+and in the live v2.19.0 bundle (`mainsail/assets/index-jNhnvCHe.js`):
+
+- `service === "iframe"` dispatches to Mainsail's `html-iframe-async` component — a first-class entry
+  in the webcam service dropdown (`Settings.WebcamsTab.HtmlIframe`), not a hack;
+- `hasAspectRatio(){ return ["iframe"].includes(this.webcam.service) }` — **aspect ratio is an
+  iframe-only setting**, free text with a validator, editable from Mainsail's own settings UI. That
+  is the card's height mechanism, and it is under our control.
+
+**Three things follow, and they matter more than the styling.**
+
+1. **His "it's the same as the fake camera" is literal, not a simile.** The panel *is* a fake camera
+   entry, already sitting on his dashboard. He was not describing a page he has to navigate to; he
+   was describing a card he already has that shows him nothing he can press. **Placement was never
+   the problem. Passivity was.** That makes §0's re-weighting the whole job.
+2. **Chapter 11 §3.3's "Nothing in either Mainsail links to `/ace/`" is wrong** and the work item
+   "link `/ace/` from Mainsail via `patch_mainsail.py`" is dead. There is no link to add.
+3. **No bundle patching is needed for placement, now or ever.** The registration lives in Moonraker's
+   `webcams` namespace — the database — which a Mainsail `update_manager type: web` extraction cannot
+   touch, and **both :80 and :82 read the same Moonraker**, so it is already on both instances. This
+   is a data-level insertion, not regex surgery, and it is strictly better than the dashboard-layout
+   route: the dashboard column order *is* also persisted in the DB (`mainsail` namespace,
+   `widescreenLayout1/2/3`, arrays of `{name, visible}`), but a name there only renders if the bundle
+   already knows that component — so the DB alone would not have been enough. The webcam route
+   sidesteps that entirely.
+
+#### 5.0.1 Is the card actually interactive? Yes — verified from the component source
+
+This was a gate: if Mainsail overlaid chrome on the iframe or swallowed pointer events, the whole
+control-surface plan would die at placement. It does not. `assets/HtmlIframe-vUGZiy4a.js` is ~1 KB
+and this is its entire render:
+
+```js
+t('div', {staticClass:'webcamBackground', style: wrapperStyle},
+  [ t('iframe', {staticClass:'webcamImage', style: iframeStyle,
+                 attrs:{src: url, title: camSettings.name}}) ])
+```
+
+| question | answer, from the source |
+|---|---|
+| `sandbox` attribute? | **No.** Scripts, forms and same-origin access all work. |
+| overlay, `pointer-events`, click-to-expand on the container? | **None.** The host `<div class="webcamBackground">` carries only the wrapper's aspect-ratio style; the panel's only chrome (title, collapse chevron, camera-selector menu) sits in the header *above* the frame. |
+| idle / power-saving blanking? | **No.** The component never reads `target_fps` or `target_fps_idle` and has no visibility logic — those fields apply to the mjpeg services. The panel does not blank when the printer is idle, which is exactly when a lane needs fixing. |
+| aspect ratio format | `/^(\d+)\s*[:/]\s*(\d+)$/` — **any integer `W:H` or `W/H`**, defaulting to `16/9` when blank or unparseable. |
+| rotation / flip | applied as a CSS `transform` **on the iframe**. Harmless for a camera, ruinous for a control panel. **Keep `rotation: 0`, `flip_*: false` on this entry, always.** |
+
+**The one real cost of the webcam route, and it is not a blocker.** `WebcamPanel` shows **one camera
+at a time**, chosen from a menu in its header, and the selection is stored per *page*
+(`gui.view.webcam.currentCam[currentPage]`, `"dashboard"` or `"page"`) — **not per panel**. So:
+
+- Two webcam cards on the dashboard is not a workaround. A layout entry named `webcam_ace` does
+  render a second panel (`extractPanelName(e) = e.split("_")[0] + "-panel"`,
+  `extractPanelId(e) = e.split("_")[1]`), but both panels read the same `currentCam["dashboard"]`
+  and would show the same feed.
+- The `All` grid does render both at once, but each cell is `col-12 col-md-6` — a **viewport**
+  breakpoint, not a container one — so on a desktop viewport they sit side by side at half the
+  column, ~300 px each. Too small for a control surface. Checked, and rejected.
+- **The dashboard and the `/cam` page keep independent selections**, because the key is
+  `currentPage`. That is the lever.
+
+**Recommendation: pin the dashboard webcam card to `ACE Panel`, and put the Arducam on `/cam`.** He
+watches the camera occasionally and deliberately; he needs the lane controls in his eyeline while he
+works, and the panel is the thing he is currently having to leave in order to type a command. If he
+would rather keep the camera on the dashboard, the fallback is `/cam` pinned to `ACE Panel` plus the
+sidebar entry (§5.3) — one click, but a page change, and that reintroduces a smaller version of the
+problem this whole section exists to remove.
+
+**Not recommended: registering a real, non-webcam dashboard card.** That means injecting a Vue
+component into the minified bundle — the same class of regex surgery as §2.7's nozzle dot, redone
+every Mainsail release, failing silently. The webcam route gets the same placement from a database
+record that no update can touch. **A verified second-best beats an unverified best.**
+
+**And, stated once so nobody re-litigates it: KlipperScreen cannot host an iframe.** It is a
+GTK/Python application, not a browser. **The touchscreen is a separate build regardless of how the
+web surface is delivered**, which is why §3.3 is a sufficiency spec and §6.1 is a split rather than a
+port.
+
+#### 5.0.2 The size constraint
+
+The card is sized by aspect ratio at the dashboard column's width — roughly **420 × 315 to
+620 × 465 at `4:3`**. That is not the 1240 px artboard. So:
+
+| where | size | what it must do |
+|---|---|---|
+| **dashboard card** (the surface he actually looks at) | ~600 × 400 at `3:2` — **change the ratio from `4:3`; recommend `3:2` or `16:10`** | header, action rail, four lane tiles in a 2 × 2 grid, `STOP ALL`. **Every control reachable; no diagram.** |
+| **card fullscreen / the `/webcam` page** | viewport width | the full §3.1 layout, diagram included |
+| **`/ace/` opened directly** | viewport width | same as fullscreen |
+
+One page, three widths, chosen by a `ResizeObserver` on `document.documentElement` — **not by
+media queries**, because inside an iframe the media query sees the iframe's width, which is what we
+want here but is worth stating so nobody "fixes" it later. The card-size layout is §3.1's
+900–1179 px breakpoint with the path card dropped, and it is the layout that must be designed first
+because it is the one he sees.
+
 ### 5.1 The decision
 
-**Keep `/ace/` as a single hand-written `ace_index.html`. Do not introduce a build step. Take the
-`/ace/` link out of the bundle patch entirely and put it in `.theme/navi.json`.**
+**Keep `/ace/` as a single hand-written `ace_index.html`, served where it already is, and keep the
+iframe-webcam registration.** Do not introduce a build step. Do not add a bundle patch for placement.
+Change `aspect_ratio` from `4:3` to a wider ratio and design the card-size layout first.
 
 ### 5.2 The two options, costed honestly
 
@@ -1174,10 +1281,11 @@ Better component ergonomics, worse everywhere else:
 The one argument for B is that the specified panel is genuinely more complex than the current one.
 It is not enough. **Recommend A.**
 
-### 5.3 Where the `/ace/` link comes from — and it is not the patcher
+### 5.3 A sidebar entry as well — optional, and not the answer to placement
 
-Chapter 11 §5-Missing-#13 proposes linking `/ace/` from Mainsail via `patch_mainsail.py`, since it
-already edits the bundle. **There is a better route, verified on the live machine 2026-08-31.**
+§5.0 settles placement: the card exists. This is a small extra for reaching the *full-width* layout
+without going through the card's fullscreen control, and it is worth four lines because it costs
+four lines.
 
 Mainsail reads a **user navigation file** at `~/printer_data/config/.theme/navi.json`. Confirmed in
 the live v2.19.0 bundle (`mainsail/assets/index-jNhnvCHe.js`):
@@ -1197,7 +1305,7 @@ So:
 [ { "title": "ACE", "href": "/ace/", "icon": "mdi-printer-3d-nozzle", "position": 45 } ]
 ```
 
-Why this is the right answer:
+Why it is worth having anyway:
 
 - `~/printer_data/config/.theme/` is **outside** `/home/simon/mainsail`, so a Mainsail
   `update_manager type: web` extraction cannot wipe it. **It needs no cron, no patcher, no regex.**
@@ -1207,7 +1315,38 @@ Why this is the right answer:
   mechanism is already proven to load here.
 - It applies to both instances, because both read their own config directory.
 
-Effort: **XS.** One file, four lines. This deletes a work item rather than adding one.
+Effort: **XS.** One file, four lines.
+
+### 5.3.1 The panel half of `patch_mainsail.py` can be deleted outright
+
+The page still has to be reachable under Mainsail's static root, and today that is a 15-minute cron
+`shutil.copy` that fails silently. **An nginx alias removes the copy entirely.** Verified by
+inspection of the live host:
+
+- `/etc/nginx/sites-available/mainsail` has `root /home/simon/mainsail;` and a catch-all
+  `location / { try_files $uri $uri/ /index.html; }`. There is no existing `/ace/` location, so a new
+  one takes precedence cleanly.
+- The traversal permissions work: `/home/simon` is `drwx--x--x` (others may traverse but not list),
+  and `printer_data`, `config`, `panel` are all `drwxr-xr-x` with `ace_index.html` at `-rw-r--r--`.
+  nginx's `www-data` can reach and read it.
+
+```nginx
+location /ace/ {
+    alias /home/simon/printer_data/config/panel/;
+    index ace_index.html;
+    try_files $uri /ace/ace_index.html;
+}
+```
+
+The page would then be **served from where it actually lives**, survive every Mainsail update by
+construction, and need no restore, no cron entry and no silent-failure mode. `patch_mainsail.py`
+drops to only its MMU-card nozzle-dot injection — a much smaller thing to keep alive — and one known
+defect (§2.7) disappears rather than being mitigated.
+
+**Not applied.** This pass does not edit the live printer, and the change needs `nginx -t` plus a
+reload. It is verified as achievable, not as done.
+
+### 5.3.2 What remains of the bundle patch
 
 **The bundle patch is demoted, not deleted.** It still owns the nozzle dot inside Mainsail's own MMU
 card, which nothing else can add. But it stops being the only route to `/ace/`, and it must stop
@@ -1387,7 +1526,7 @@ rather than ahead of them.
 
 | # | Slice | Size | What he sees after it |
 |---|---|---|---|
-| **0** | `.theme/navi.json` — an `ACE` entry pointing at `/ace/` (§5.3) | **XS** | An **ACE item in Mainsail's sidebar**, on both instances, surviving every update. The panel stops being a URL you have to remember. Same day. |
+| **0** | Change the ACE Panel webcam entry's `aspect_ratio` from `4:3` to `3:2`, and add the `.theme/navi.json` sidebar entry (§5.0, §5.3) | **XS** | The dashboard card it is **already registered as** gets a shape that fits four lane tiles side by side, plus a sidebar route to the full-width view. Two settings changes, no code. |
 | **1** | **The action rail** (§2.12) bolted onto the *existing* panel, with the command manifest and the §4.3 predicates | **S–M** | **The first thing he can click.** Every message that says "run `MMU_RECOVER GATE=2`" becomes that button, with the sentence beside it. This lands before any restyling and it is the whole point of the panel. |
 | **2** | Lane controls: Load / Park / Retract / Eject / Eject (force) per lane, plus the recovery bar (`Audit`, `Recover`, `Clear op`, `Unlock`, `Reconcile`, `Clear suppression`) — with verbatim disabled reasons | **L** | **The console stops being necessary for the common path.** Every disabled control says why. `_ACE_SUPPRESSION_DISARM` stops being invisible. |
 | **3** | `ACE_STOP_ALL` (§4.5) + the `ACE_LANES` rewrite (§6.3), including the `.steps` crash that stops the dialog rendering during an eject | **S** | One control that stops everything, on both surfaces. The touchscreen dialog gains a Load button and one decisive line, and it appears during an eject instead of crashing. |
