@@ -1928,3 +1928,166 @@ contradict the controller rather than guard it. **What is flagged to QA:** wheth
 whether that case wants a gate. Until answered, the panel gates neither and never gates `Stop`.
 
 ---
+
+## 11. Two surfaces: the card and the page
+
+**Added 2026-08-31.** *"I'm open to suggestions in how this is to be presented to the user (separate
+page would need to be very enticing) so maybe the basics in the Klipper card, full control in
+dedicated page instead of having to use macros from Klipper."*
+
+The parenthesis is the whole design problem. **He already has a separate page and never opens it.**
+
+### 11.1 What the page is for — one sentence
+
+> **The card asserts; the page shows its working.**
+
+The page is where the machine explains itself: every figure the card states, traced back to the
+sensor edge or the reckoning behind it; the last operations and what each one actually moved; and
+every recovery command in one place.
+
+That is aimed squarely at what he actually does at a desk — debugging — and it is the one thing a
+camera view can never be. It is also not "the card, bigger", which is the failure mode that produces
+a page nobody opens twice.
+
+The concrete content that only the page can carry:
+
+- **The derivation behind every number.** The card says `T2 · at least 884 mm · reckoned ±18`. The
+  page says *why*: `staged` last re-anchored at the hub 41 minutes ago, `+1240 mm` of `ACE_FEED` and
+  `−356 mm` of `ACE_RETRACT` counted since, encoder at 0 pulses because the hub has not tripped, and
+  the three commands in the tree that can move this number without telling it.
+- **The sensor truth table, live**, with the impossible row highlighted and each cell's `enabled` bit
+  shown — the thing that makes `entry = 0 / post = 1` legible instead of alarming.
+- **The last N operations**, from `gcode_store` plus `ace_swap_timing`, each with what it moved and
+  what the tip position was before and after.
+- **Every recovery command in one place**, including the ones no error message names.
+
+### 11.2 The architecture — one file, two layouts
+
+**Evaluated first: is Mainsail's own fullscreen/webcam-page view enough?** Partly, and it is worth
+knowing what it does give:
+
+- `/cam` is a real route (`{name:"webcam", path:"/cam", fullscreen:true, showInNavi:true,
+  position:20}`) and it is **already in his sidebar**. It renders the same `WebcamPanel` with
+  `currentPage: "page"`, which has an **independent camera selection** from the dashboard — so the
+  page can be pinned to the ACE panel while the dashboard card is too.
+- The aspect-ratio lock stops biting, because height follows width: at a 1600 px viewport and `3:2`
+  the iframe is ~1600 × 1067. That is a genuine full page.
+
+**But it fails the deep-link requirement.** The card cannot hand `/cam` a lane and a state — the
+selection is a store value, not a route parameter, and there is no channel from inside the iframe to
+Mainsail's router. A `postMessage` handshake would need a bundle patch on the receiving side, which
+is the fragile route §5.0.1 rejects.
+
+**Decision: one file, two layouts, and the page is `/ace/` opened directly.**
+
+| | |
+|---|---|
+| **layout selection** | a `ResizeObserver` on `document.documentElement`, **not media queries** — inside an iframe a media query sees the iframe, which is what we want, but saying so stops someone "fixing" it later. Under 760 px wide ⇒ card layout. Over ⇒ page layout. Phone portrait is its own branch below 520 px. |
+| **deep link** | the URL hash: `/ace/#lane=2&view=jog`, `#view=derivation&lane=2`, `#view=recovery`. Parsed on load and on `hashchange`. |
+| **the doorway** | every card control that belongs on the page is an **`<a target="_blank" href="/ace/#…">`**. From inside an iframe that opens a real new tab — **no postMessage, no bundle patch, no remembered URL.** The card is literally the doorway and the door knows which room. |
+| **artefacts** | **one.** One file, one deploy, one nginx alias (§5.3.1), one webcam record. The page and the card cannot drift apart because they are the same document. |
+
+The `.theme/navi.json` entry (§5.3) gives a sidebar route to the same page for when he starts there
+rather than at the card.
+
+### 11.3 The floor rule, and how it is enforced
+
+> **If the card cannot get him out of a fault, it has failed, whatever the page offers.**
+
+Enforced as a rule on the surface assignment, not as good intentions: **every control that appears in
+a banner, in the action rail, or in the §6.3 priority ladder's top seven rungs is card-resident, by
+construction.** Those three lists are exactly the machine's own account of "something is wrong and
+here is what to do", so if a control appears in one of them it is on the card. No exceptions, and no
+judgement call at design time.
+
+### 11.4 Surface assignment — every control
+
+`C` = card. `P` = page. `C+P` = both, because it is needed in a hurry *and* has depth behind it.
+
+| Control | Surface | Why |
+|---|---|---|
+| **STOP ALL** | **C+P** | Safety. Present on every surface, always enabled, never gated. |
+| Lane tip position + confidence | **C+P** | The headline display and the basis for every next click. The page adds the derivation. |
+| **Load** `T{i}` | **C** | The commonest action. One press, no depth to add. |
+| **Park** / **Retract** | **C** | Resolves "toolhead is occupied", which blocks everything else. |
+| **Eject** / **Eject (force)** | **C** | Force-eject is the *only* way out of an orphaned lane. Floor rule. |
+| **Abort eject** | **C** | Appears while an eject runs; that is a fault-shaped state. |
+| **Clear jam on T{n}** | **C** | Banner control. Floor rule. |
+| **Recover** `MMU_RECOVER GATE={i}` | **C** | Named in three error messages; the answer to a state mismatch. Floor rule. |
+| **Clear op** `ACE_CLEAR_OP` | **C** | Banner control; an open intent blocks all motion. Floor rule. |
+| **Unlock toolchange** / **Reconcile target** | **C** | Ladder rung 6. Floor rule. |
+| **Clear suppression** | **C** | Ladder-adjacent, and the sharpest single finding in chapter 11. Floor rule. |
+| **Run audit** (verdict + one-line why) | **C** | Verdict on the card; the **full multi-line output on the page**. |
+| **Action rail** | **C** | It exists to surface what just went wrong. Card by definition. |
+| **Dryer: mode, target, progress, start, stop** | **C** | *"A dry he cannot start from the dashboard is a dry he types."* |
+| **Assign spool…** (picker) | **P** | A searchable list of dozens and a text filter. Keyboard work; nothing breaks while he walks to a desk. |
+| **Destination chips** (`stage`, `park`, `gears`, and the three disabled ones) | **P**, with `stage`/`park` also on **C** | `park` clears the toolhead, which is fault recovery — card. The rest is deliberate positioning, done at a desk. |
+| **Jog ± and step selector** | **P** | Never a mid-print reflex. It needs the segment-ownership interlock, the step selector and the tip-confidence readout all visible together — which is exactly the room the card does not have. |
+| **Re-read tag** | **P** | Diagnostic; nothing is blocked while it is not done. |
+| **Write tag** (disabled, no firmware support) | **P** | An explanation, not a control. |
+| **Calibrate path**, **Normalize lanes** | **P** | Minutes long, quarterly, needs a verified-clear path. |
+| **Dryer presets, duration, auto-dry parameters, absolute humidity** | **P** | Scheduling detail. The mode and the target are on the card. |
+| **Derivation view**, **sensor truth table**, **operation history** | **P** | This is what the page is *for* (§11.1). |
+| **Preload guard status**, **buffer state**, **printer state** | **P** | Multi-line diagnostics. |
+| **Cleanup stale vars**, **Reset shared bus** | **P** | Destructive or rare; two-step by design. |
+| **Select / clear bypass** | **P** | Rare, and it has a prose explanation attached. |
+| ~~Drying rotisserie~~ | **neither** | Removed by §10.5. QA-blocked. |
+
+**Floor-rule check.** Walking the §6.3 ladder's top seven rungs — jam, impossible sensor pair, eject
+running, orphaned strand, open intent, interrupted toolchange, state-vs-sensor mismatch — each one's
+answer is `Clear jam`, `Audit`+`Query sensors`, `Abort eject`, `Eject (force)`, `Clear op`,
+`Reconcile`/`Unlock`, `Recover`. **All seven are card-resident.** The floor holds.
+
+**The one place it is close.** A *stale calibration* makes the tip display untrustworthy, and
+`Calibrate path` is page-only. That is deliberate: a bad calibration is not a fault you resolve
+mid-print with gloves on — the card's honest response is to stop drawing to scale and say so (§2.2),
+and the fix is a desk job. **Flagged so it is a decision on record rather than an oversight.**
+
+### 11.5 Card layout, ~600 × 400 at `3:2`
+
+The density fight is over: the card carries the floor and nothing else.
+
+```
+┌───────────────────────────────────────────────────────────────────┐
+│ ACE 2 Pro   ● conn   coherent   path clear            [ STOP ALL ] │  40
+├───────────────────────────────────────────────────────────────────┤
+│ ▌ [ MMU_RECOVER GATE=2 ]  filament at the toolhead, no lane owns…  │  36  (rail, absent when empty)
+├─────────────────────────────┬─────────────────────────────────────┤
+│ ▌T0  empty                  │ ▌T1  Unknown              AT GATE   │
+│  ●┄┄┄┄┄┄┄┄┄┄┄┄○───○──○      │  ●━━━┄┄┄┄┄┄┄┄┄○───○──○              │ 118
+│  —                          │  at least 0 mm                      │
+│  [ load ] [ eject ]  ⟶      │  [ load ] [ eject ]  ⟶              │
+├─────────────────────────────┼─────────────────────────────────────┤
+│ ▌T2  Bambu Yellow PLA STAGED│ ▌T3  empty                          │
+│  ●━━━━━━━━━━━━━◐┄┄○───○──○  │  ●┄┄┄┄┄┄┄┄┄┄┄┄○───○──○              │ 118
+│  at least 884 ±18 · reckoned│  —                                  │
+│  [ park ] [ eject ]  ⟶      │  [ load ] [ eject ]  ⟶              │
+├─────────────────────────────┴─────────────────────────────────────┤
+│ DRYER  auto · hold ≤20%   23%▸20   45°C  ▓▓▓▓▓▓▓░░░  [ stop ]     │  44
+└───────────────────────────────────────────────────────────────────┘
+   40 + 36 + 118 + 118 + 44 + gaps = 368 … 400 at 3:2 with 600 width
+```
+
+Each tile is ~285 × 118: the ladder, one line of position with its confidence, two buttons, and the
+**`⟶` doorway** — an anchor to `/ace/#lane={i}` that opens the page focused on that lane. Recovery
+controls are not drawn as a permanent bar; they arrive as banners and rail items, which is when they
+are needed and is why the card fits.
+
+At `4:3` (the current setting) the same content is 600 × 450 and the tiles get 143 px each, which is
+also fine. **`3:2` is the recommendation, not a requirement** — the layout is driven by the
+`ResizeObserver`, so it degrades rather than breaking. Set it in **Mainsail → Settings → Webcams →
+ACE Panel → Aspect ratio**, value `3:2`.
+
+### 11.6 Page layout — what the room is spent on
+
+The §3.1 layout, plus three things that exist only here:
+
+| block | contents |
+|---|---|
+| **Lane detail** (deep-link target) | the full §9.1 lane frame for one lane: ladder, all five destination chips including the three disabled ones with their reasons, jog with the step selector and the segment-ownership interlock, `Re-read tag`, `Assign spool…`, and the per-lane calibration constants |
+| **Derivation** | for the selected lane: how `staged` reached its current value — the re-anchor time, the counted feeds and retracts since, the encoder state, and the commands that can move it untracked. The card's `±18` becomes a sentence about `hub_detect`'s 0.3 s poll |
+| **Truth table** | all six sensor bits live, with `enabled` shown per sensor and the impossible row called out |
+| **History** | `gcode_store` filtered to ACE traffic, plus `ace_swap_timing.last`, each row with what moved |
+| **Diagnostics & maintenance** | audit output in full, preload-guard status, buffer state, calibration, normalize, cleanup, bypass |
+
+---
