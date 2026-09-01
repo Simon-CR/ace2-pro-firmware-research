@@ -149,3 +149,76 @@ Safety rules for any write:
 The useful distinction: Bambu fails at the *read* stage (crypto), OpenSpool fails at the *format*
 stage. Both land on the UID path, which is why UID-keying covers every case without per-format
 decoders in firmware.
+
+## V1.1.3W — the build that is actually running, and what it does (2026-09-01)
+
+**Undocumented until now.** The machine has been running `V1.1.3W` since at least 2026-08-31 (it
+appears in `11-operator-interface.md` and `12-panel-visual-design.md` only as an *observed* value).
+The documented builds are `V1.1.3O` (patches), `V1.1.3U` (first proven flash) and `V1.1.3M` (UID
+passthrough). **W is none of them and its behaviour was never recorded.**
+
+Observed 2026-09-01 with an **OpenSpool NDEF tag** in lane 1, live on the machine:
+
+```
+ACE[0]: Slot 1 RFID detected -> querying get_filament_info...
+ACE[0]: Slot 1 RFID full data -> sku=application/json{", temp=28770°C (min=26719, max=30821),
+        color=RGB(58,34,101), hotbed={'min': 8804, 'max': 8762}, brand=
+```
+
+**That is neither stock nor UID passthrough.** Per the table above, stock returns a `READFAILED`
+class for a tag that fails the page-4 header gate, and the UID-passthrough patch returns the UID in
+`sku`. W returns **code 0 with the raw NDEF payload run through the positional Anycubic parser**:
+
+- `sku = application/json{"` is the NDEF MIME-type record header.
+- `material = ,"version":"1.0","t` is more of the same JSON, read at the material offset.
+- `temp`, `hotbed` and `color` are whatever bytes landed at those offsets.
+
+So W appears to **bypass or fail-open the page-4 header gate** without the UID formatting stub.
+
+### Why that is the worst of the three outcomes
+
+| firmware | foreign tag result | is it safe? |
+|---|---|---|
+| stock | `READFAILED` | yes - honest failure, lane reads untagged |
+| UID passthrough (`M`) | UID in `sku` | yes - a stable key to look up |
+| **`W` (running)** | **code 0 + garbage that looks structured** | **no** |
+
+A `READFAILED` is honest. A UID is useful. Garbage returned as *success* is neither, and it reached
+three consumers before anything caught it:
+
+1. **The heater.** `_ACE_PRE_TOOLCHANGE` sets the pre-toolchange target from the lane's RFID temp
+   (`heating to 210C for T2 (source: rfid)`). A lane reporting `28770` offers that as a setpoint.
+2. **The gcode parser.** The payload contains double quotes, and lane text is interpolated into
+   `RESPOND MSG="..."`, which terminates the string early:
+   `Malformed command 'RESPOND MSG="  T1  READY  ,"version":"1.0","t  (no spool assigned)"'`
+3. **The panel**, which displayed `,"version":"1.0","t | 28770°C` as a filament.
+
+### Host-side mitigation added 2026-09-01
+
+`instance.py` `_handle_rfid_info_response` now **rejects the whole decode** before it reaches
+inventory, on any of:
+
+- `hotbed.min > hotbed.max` (here 8804 > 8762) - no real tag describes an inverted range
+- nozzle temp outside `0..500`
+- quotes or control characters in `sku` / `brand` / `material`
+
+Rejected decodes log and are treated as **no tag**, which is the honest state and the one the
+preload search handles safely. The whole decode is discarded rather than individual fields
+sanitised: a positional misparse means every field came from the wrong offset, so a field that
+happens to look sane is still meaningless.
+
+**This is a workaround, not the fix.** The fix is the UID passthrough stub in firmware, which turns
+every foreign tag into a stable key the host can look up in FilaMan/Spoolman. Until W is either
+identified or replaced with a build that has it:
+
+- **Anycubic-format tags** (write your own - SM22 and SM24 on this machine) work correctly.
+- **Untagged lanes** are safe and honest; assign with `MMU_GATE_MAP GATE=<n> SPOOLID=<n>`.
+- **An OpenSpool tag is worse than no tag on this build.** Remove it or overwrite it in Anycubic
+  format until the firmware question is settled.
+
+### Open, and it matters
+
+**Nobody knows what `V1.1.3W` contains.** It is running on the machine, it is not stock, and no
+build record exists. Before any further firmware work: dump the running image and diff it against
+stock `V1.1.31` and against the `M` build, and record the result here. A device running an
+unidentified image is not a base to patch from.
