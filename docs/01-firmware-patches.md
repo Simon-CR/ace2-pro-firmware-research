@@ -203,3 +203,50 @@ offsets, and `firmware/apply_patch.py` applies them with no toolchain required.
 
 **No Anycubic firmware is distributed here.** You supply your own base image; the patch files
 contain only our own code.
+
+## The V1.1.3W stubs are RUNNING but UNBUILDABLE (2026-09-01)
+
+`V1.1.3W` was flashed 2026-08-28 19:50 and is what the machine runs today. It contains:
+
+```
+uid stub    64 bytes at 0x080197A0   (from V1.1.3M, proven: Bambu UID -> sku, version 0x0201)
+rc522 stub 170 bytes at 0x080197E0   (calls the firmware's own transceive routine at 0x0800F32C)
+```
+
+**Neither stub's source, build script, nor calling convention was recorded, and the artefacts are
+gone.** `/tmp/fw/` on the printer is empty; `find / -name "*rc522*" -o -name "ACE2_*.bin" -o -name
+"ota_fast.py"` returns nothing; `L:ce2-fw-analysis\` holds only disassembly slices, no builder.
+
+The consequence is concrete: **the RC522 passthrough is present in the running firmware and cannot
+be invoked**, because the encoding packed into the `FILAMENT_IDENTIFY` uint32 (the stub hooks the
+`index >= 4` rejection path) was never written down. A capability that exists and cannot be reached
+is worth the same as one that does not exist, and it cost a day to discover that twice over -
+first for W's identity, then for its calling convention.
+
+**Rule going forward: a firmware build is not done until its source, its invocation encoding and a
+worked example are in this repo.** The image is not the artefact; the ability to rebuild it is.
+
+### What to build next, and why it supersedes both stubs
+
+Simon's requirement, 2026-09-01: *"I want the firmware to be able to give us the tag ID and the
+data ideally."*
+
+That is a better design than either existing stub, and the groundwork is already done:
+
+```
+sub_800E18C   reads NTAG pages 4-39 (144 B) -> 0x20000704
+sub_800E7A8   GET_FILAMENT_INFO (cmd 68): detect + UID, page read, THEN field copy
+```
+
+For a foreign tag the firmware already has the UID and all 144 bytes in RAM; it then runs the
+Anycubic field copy over them and returns garbage (see `03-rfid-and-tags.md`, OpenSpool). **A stub
+that returns UID + the raw 144 bytes instead makes the firmware format-blind for reads, and every
+format - Anycubic, OpenSpool, FilaMan, OpenPrintTag, anything later - becomes a host-side parser.**
+
+Design constraints for that build:
+- Hook the **format-gate** exit, not just `READFAILED` - OpenSpool reads fine and fails the gate,
+  which is why the UID stub never fires for it.
+- 144 bytes will not fit a protobuf string field as raw binary; hex is 288 chars, base64 ~192.
+  Decide and DOCUMENT the encoding.
+- Keep `version 0x0201` (or a new sentinel) so the host can tell a raw dump from a real decode.
+- Record the invocation, the response layout, and one captured example, here, in the same commit.
