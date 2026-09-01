@@ -245,3 +245,53 @@ foreign NDEF tag return their UID exactly as Bambu tags do, and the host keys on
 
 Until then, on `V1.1.3W`: **an OpenSpool tag is worse than no tag.** Write Anycubic-format tags for
 spools you own (that path needs no firmware change at all), and leave the rest untagged.
+
+## Where spool data comes from, and who wins (design, 2026-09-01)
+
+Settled with Simon. Two independent questions that were being conflated: *where does identity come
+from* and *where does displayed data come from*.
+
+### Resolution order
+
+```
+1. FilaMan, if reachable AND the spool resolves   -> AUTHORITATIVE
+2. Tag content                                    -> fallback display only
+3. Neither                                        -> prompt to bind
+```
+
+**FilaMan trumps the tag whenever it answers.** It is the live, editable record: a material
+corrected in the backend must not be overridden by a snapshot written to a tag months earlier. The
+tag is never the authority on a spool that resolves.
+
+**But the tag must still be able to render on its own.** Simon: *"if filaman backend is not
+available, we can still display spool id (if there's one), color, material, temp."* The printer's
+link to that subnet has measured 42/82/189 ms RTT and has produced `HTTP error: 500 Timeout while
+connecting` flapping before, so an unreachable backend is a real operating state, not a hypothetical.
+A panel that renders nothing without the network is a panel that goes blank on a bad WiFi minute.
+
+**This is why UID-only decoding is not sufficient**, and why the firmware build must return the raw
+tag bytes rather than just an identifier: a UID renders nothing offline.
+
+### The tag's two jobs, which are separate
+
+| | used | source of |
+|---|---|---|
+| **identity** (`SM<n>` in the SKU) | ALWAYS - it is the lookup key | which FilaMan spool this is |
+| **descriptive data** (material, colour, temps, diameter) | only when the lookup fails or the backend is down | fallback display |
+
+Identity is what makes a spool self-describing with no pre-registration, works from either tag on a
+dual-tagged spool, and survives re-tagging - none of which UID-keying manages. See
+`ace_mmu_shim.py:_spool_from_sku` / `_autobind_spools`, already live: `SM22` -> spool 22.
+
+### Disagreement is a finding, not a nuisance
+
+When both sources are present and they conflict - tag says PLA, FilaMan says PETG - **the backend
+wins, and the mismatch is surfaced.** Silently overriding hides the two cases that actually cause
+it: the tag is on the wrong spool, or the spool was refilled with a different material. Purge
+temperature and transition volume both derive from material, so a wrong answer here is not cosmetic.
+
+### What this means for tags we write
+
+Write the FULL descriptive set plus `SM<spool_id>`, in whatever format. A tag written that way is
+self-sufficient by construction: it renders correctly on a machine that has never seen this FilaMan
+instance, which is also what makes a spool portable between printers.
