@@ -271,3 +271,77 @@ A few instructions, no size growth beyond the op, and it turns the firmware into
 transport the host-side parser needs. Do this one before the format-gate hook - it is what makes
 every non-Anycubic format readable at all.
 
+
+## The raw-tag hook (designed 2026-09-01, not yet built)
+
+### Why a third hook
+
+The two existing hooks each cover one exit and leave the case that matters uncovered:
+
+| tag | path taken | result |
+|---|---|---|
+| Anycubic layout | normal decode | full fields — correct |
+| Bambu MIFARE | `READFAILED(6)` exit → **UID stub** | UID in `sku` — useful |
+| OpenSpool / FilaMan / Creality / OpenPrintTag | **neither** — pages read fine, then the positional parser runs on them | **code 0 + garbage that looks structured** |
+
+The third row is the whole problem. Those tags read *perfectly*; they simply are not in Anycubic's
+layout, so parsing them at Anycubic's offsets yields `sku=application/json{"`, `temp=28770C` and
+an inverted hotbed range — returned as SUCCESS. Stock firmware's honest `READFAILED` is safer than
+what `W` currently does.
+
+### Where the bytes are
+
+The handler at `0x0800E7A8` reads the tag into a stack buffer and only then parses it:
+
+```
+800e80c:  add.w  r8, sp, #4        @ scratch base
+800e82a:  add.w  r1, r8, #24       @ r1 = sp+28   <- destination for page data
+800e82e:  bl     0x800e18c         @ the page read; returns byte count in r0
+800e832:  cmp    r0, #140
+800e834:  bcs.n  0x800e842         @ >=140 bytes -> positional parse
+800e836:  movs   r0, #6            @ READFAILED   (UID stub hooks here)
+800e842:  ...                      @ positional parse starts
+```
+
+**At `0x0800E842` the complete raw tag image is at `sp+28` with its length in `r0`, before any
+positional interpretation.** That is the interception point, and it is strictly better than
+hooking a later "format gate": nothing has been misread yet, and the firmware has already done
+every hard part — parking the tag, driving the RF layer, CRC, anticollision.
+
+### The design
+
+Hook `0x0800E842`. The stub tests the first four bytes at `sp+28`:
+
+- `7B 00 65 00` (magic 123, version 101) → branch to the original parse. **Anycubic tags are
+  completely unaffected**, which keeps the risk profile of the existing patches.
+- anything else → copy raw bytes into the response and return `code = 0` with a version sentinel
+  (the same convention `uid_stub.s` established with `0x0201` for "this sku is a UID").
+
+The host then owns format identification entirely: firmware stays format-blind, and support for a
+new tag layout becomes a Python change with no reflash.
+
+**Why this retires most of the host-side work:** reading a foreign tag needs no RC522 passthrough,
+no `op 9`, no host RF state machine, and above all no spool-rotation ritual — the automatic
+identify already parks the tag. It also removes the stale-RX-buffer trap, which is invisible and
+cost two failed read attempts on 2026-09-01: the shared staging region holds whatever the last
+scan left there, so a stale buffer is indistinguishable from a successful read unless two
+different pages are compared.
+
+### The one real constraint: `sku` is 19 bytes
+
+Response layout is `+4 u16 version, +8 sku[19], +140 u32 code`. A 144-byte tag image does not fit,
+so the transfer has to be chunked. The chunk source is free — the bytes are already in RAM, so
+each chunk costs one identify against a cached read, with no re-read and no anticollision exposure.
+
+Open design point, to settle before building: **how the host selects a chunk.** The request index
+cannot carry it — `cmp r0, #4` at `0x0800E7D2` rejects anything above 3 before the read happens
+(that rejection is what the RC522 passthrough hooks). Candidates:
+
+1. a static counter in the stub, cycling chunks on successive calls, with the chunk number
+   returned in `version` so the host can reassemble regardless of ordering;
+2. raw bytes rather than hex in `sku` (19 per call instead of 9) — needs the host to read
+   protobuf field 3 as bytes, since the driver currently does `.decode(errors="ignore")` and
+   would mangle them;
+3. an additional response field, which means the stub builds protobuf itself — more invasive.
+
+(1) + (2) gives 19 bytes per call, 8 calls for a full image, and no protobuf work.
