@@ -204,49 +204,70 @@ offsets, and `firmware/apply_patch.py` applies them with no toolchain required.
 **No Anycubic firmware is distributed here.** You supply your own base image; the patch files
 contain only our own code.
 
-## The V1.1.3W stubs are RUNNING but UNBUILDABLE (2026-09-01)
+## V1.1.3W: what it contains, and the one defect blocking raw tag reads (2026-09-01)
 
-`V1.1.3W` was flashed 2026-08-28 19:50 and is what the machine runs today. It contains:
-
-```
-uid stub    64 bytes at 0x080197A0   (from V1.1.3M, proven: Bambu UID -> sku, version 0x0201)
-rc522 stub 170 bytes at 0x080197E0   (calls the firmware's own transceive routine at 0x0800F32C)
-```
-
-**Neither stub's source, build script, nor calling convention was recorded, and the artefacts are
-gone.** `/tmp/fw/` on the printer is empty; `find / -name "*rc522*" -o -name "ACE2_*.bin" -o -name
-"ota_fast.py"` returns nothing; `L:ce2-fw-analysis\` holds only disassembly slices, no builder.
-
-The consequence is concrete: **the RC522 passthrough is present in the running firmware and cannot
-be invoked**, because the encoding packed into the `FILAMENT_IDENTIFY` uint32 (the stub hooks the
-`index >= 4` rejection path) was never written down. A capability that exists and cannot be reached
-is worth the same as one that does not exist, and it cost a day to discover that twice over -
-first for W's identity, then for its calling convention.
-
-**Rule going forward: a firmware build is not done until its source, its invocation encoding and a
-worked example are in this repo.** The image is not the artefact; the ability to rebuild it is.
-
-### What to build next, and why it supersedes both stubs
-
-Simon's requirement, 2026-09-01: *"I want the firmware to be able to give us the tag ID and the
-data ideally."*
-
-That is a better design than either existing stub, and the groundwork is already done:
+`V1.1.3W` was flashed 2026-08-28 19:50 and is what the machine runs today:
 
 ```
-sub_800E18C   reads NTAG pages 4-39 (144 B) -> 0x20000704
-sub_800E7A8   GET_FILAMENT_INFO (cmd 68): detect + UID, page read, THEN field copy
+uid stub    64 bytes at 0x080197A0   (Bambu UID -> sku, version 0x0201)
+rc522 stub 170 bytes at 0x080197E0   (exposes the firmware's own high-level RFID primitives)
 ```
 
-For a foreign tag the firmware already has the UID and all 144 bytes in RAM; it then runs the
-Anycubic field copy over them and returns garbage (see `03-rfid-and-tags.md`, OpenSpool). **A stub
-that returns UID + the raw 144 bytes instead makes the firmware format-blind for reads, and every
-format - Anycubic, OpenSpool, FilaMan, OpenPrintTag, anything later - becomes a host-side parser.**
+**Source, build script and calling convention are all in `firmware/` in this repo** -
+`rc522_stub.s`, `uid_stub.s`, `build_patch.py`, `apply_patch.py`, `patch.json`. Built images and
+the stock image are in `L:ce2-fw-analysis\ex\` and mirrored on the printer at
+`~/printer_data/ace2-fw-analysis/ex/`.
 
-Design constraints for that build:
-- Hook the **format-gate** exit, not just `READFAILED` - OpenSpool reads fine and fails the gate,
-  which is why the UID stub never fires for it.
-- 144 bytes will not fit a protobuf string field as raw binary; hex is 288 chars, base64 ~192.
-  Decide and DOCUMENT the encoding.
-- Keep `version 0x0201` (or a new sentinel) so the host can tell a raw dump from a real decode.
-- Record the invocation, the response layout, and one captured example, here, in the same commit.
+*(An earlier revision of this section claimed these were lost. That was wrong - a `find` that only
+covered `docs/` and a `-maxdepth 5` search from `/`. Everything was where it should be.)*
+
+### Calling convention
+
+The stub hooks `FILAMENT_IDENTIFY` (cmd 68) on its `index >= 4` rejection path - dead code, since
+there are only four slots - so normal identify on slots 0-3 is untouched. The operation is packed
+into the request's single uint32:
+
+```
+bit31=1 | bit24=reader | op<<16 | arg1<<8 | arg2
+
+op 0  read register arg1                       -> byte
+op 1  write arg2 to register arg1              -> 0
+op 2  store arg2 into staging buffer at arg1   -> 0
+op 3  transceive: cmd arg2, arg1 TX bytes      -> helper status
+op 4  read RX buffer byte at arg1              -> byte
+op 5  read received bit length                 -> byte
+op 6  SELECT a card (sub_800DEB6)              -> status (0 = ok); UID at BUF+13..19
+op 7  bulk page read 4..39 (sub_800E18C)       -> byte count (144 = 0x90 ok), data at BUF
+op 8  clear the cached tag record for slot arg1 -> 0
+```
+
+Staging buffer `0x20000704` (the firmware's own tag-page buffer, idle while background scanning is
+disabled): `+0` TX/select scratch, `+64` RX, `+128` rx bit length.
+
+v3 exists because v2 could drive registers but never got a card to answer: `0x0800F32C` is only the
+transceive STEP, while every working read wraps it in `sub_800DEB6` (reset + antenna + analog init +
+REQA/anticollision/SELECT). v3 exposes the firmware's own high-level primitives instead, which are
+proven because normal identify uses them.
+
+### The defect that blocks raw tag reads, and its fix
+
+Recorded in the stub's own header:
+
+> **op 7** takes no args, and writes 144 bytes at `BUF+0` while **op 4** reads `BUF+64` with a
+> 6-bit offset - so **only dump bytes 64..127 (pages 20..35) can be read back**, and the write
+> clobbers the staged TX frame and the bit-length byte at `BUF+128`.
+
+**This is what stands between the machine and Simon's requirement** (*"I want the firmware to be
+able to give us the tag ID and the data"*). The UID is reachable today via op 6. The page data is
+read by op 7 but only its second half can be retrieved - and **page 4 is in the unreachable half**,
+which is precisely where every format's detection signature lives (Anycubic `7B 00 65 00`, NDEF
+magic, etc). So format detection is impossible through the current readback window.
+
+**The fix is already designed in that same comment:** bits 15..14 of the packed word are free, so
+
+> a future **op 9** reading `BUF + ubfx(r5,8,8)` would expose the whole buffer.
+
+A few instructions, no size growth beyond the op, and it turns the firmware into the format-blind
+transport the host-side parser needs. Do this one before the format-gate hook - it is what makes
+every non-Anycubic format readable at all.
+
