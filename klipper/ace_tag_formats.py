@@ -134,7 +134,12 @@ def _first_json(img):
 
 # The JSON families (OpenSpool, FilaMan's writer, OpenPrintTag) differ mainly in spelling.
 _JSON_KEYS = {
-    "sku": ("sku", "SKU", "spool_id", "spoolId", "spool"),
+    # Real FilaMan/OpenSpool tag, read off the machine 2026-09-01:
+    #   {"protocol":"openspool","version":"1.0","type":"PLA","color_hex":"4B2A17",
+    #    "brand":"Filaments.CA","min_temp":"200","max_temp":"220","spool_id":26,"sm_id":26}
+    # Both spool_id and sm_id carry the spool number, and both sit BEYOND the 144-byte bulk
+    # read - so a reader that stops at page 39 gets everything except the identity.
+    "sku": ("sku", "SKU", "spool_id", "spoolId", "spool", "sm_id"),
     "brand": ("brand", "manufacturer", "vendor", "make"),
     "material": ("type", "material", "filament_type", "material_type"),
     "color": ("color_hex", "color", "colour", "hex", "color_hex_1"),

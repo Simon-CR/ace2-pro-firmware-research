@@ -28,7 +28,8 @@ import urllib.parse
 import urllib.request
 
 B = "http://10.49.9.130:7125"
-IMAGE_LEN = 144          # pages 4..39
+IMAGE_LEN = 144          # pages 4..39 - all the firmware's own bulk read (op 7) can reach
+TAIL_LAST_PAGE = 75      # keep walking past page 39: see read_tail()
 RAW_SENTINEL = 0x0202
 
 
@@ -45,6 +46,22 @@ def _store(count=400):
 
 def packed(reader, op, arg1, arg2=0):
     return 0x80000000 | (reader << 24) | (op << 16) | ((arg1 & 0xFF) << 8) | (arg2 & 0xFF)
+
+
+def _op(reader, op, arg1, arg2=0):
+    """One passthrough op, returning the byte the firmware puts in `code`."""
+    import re as _re
+    idx = packed(reader, op, arg1, arg2)
+    t = time.time()
+    _post("ACE_RAW_CMD T=0 CMD=FILAMENT_IDENTIFY INDEX=%d" % idx)
+    time.sleep(0.6)
+    for g in _store(60):
+        if g["time"] < t - 0.3:
+            continue
+        m = _re.search(r"\{'index': (\d+)\}.*?'code': (\d+)", g["message"])
+        if m and int(m.group(1)) == idx:
+            return int(m.group(2))
+    return None
 
 
 def read_image(reader, length=IMAGE_LEN, batch=24):
@@ -65,6 +82,36 @@ def read_image(reader, length=IMAGE_LEN, batch=24):
             if idx in idxs:
                 out[(idx >> 8) & 0xFF] = code & 0xFF
     return bytes(out.get(i, 0) for i in range(length)), len(out)
+
+
+def read_tail(reader, first=40, last=TAIL_LAST_PAGE):
+    """Read pages beyond 39, one NTAG READ (4 pages) at a time.
+
+    op 7 stops at page 39 because 144 bytes is all an NTAG213 holds - but a real OpenSpool tag
+    on a larger NTAG carries more. Measured on this machine: the NDEF TLV declares 0xAF = 175
+    bytes, and the JSON runs to 177. Everything up to "max_temp" fits in the first 144; the
+    IDENTITY does not:
+
+        ..."max_temp":"220","spool_id":26,"sm_id":26}
+
+    So a reader that stops where op 7 stops recovers the colour, material and temperatures and
+    misses the one field that says which spool this is.
+
+    Re-SELECT before every READ: without it the tag stops answering after the first transceive
+    and the RX region still holds the previous reply, which looks exactly like a successful read
+    of the wrong page. The giveaway is the same 16 bytes repeating every four pages.
+    """
+    out = bytearray()
+    for page in range(first, last + 1, 4):
+        _op(reader, 6, 0)
+        _op(reader, 2, 0, 0x30)
+        _op(reader, 2, 1, page)
+        _op(reader, 3, 2, 0x0C)
+        vals = [_op(reader, 9, 64 + i) for i in range(16)]
+        if not any(v for v in vals if v):
+            break
+        out.extend(v or 0 for v in vals)
+    return bytes(out)
 
 
 def sniff(img):
@@ -108,13 +155,38 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--slot", type=int, required=True)
     ap.add_argument("--json", help="write the image and any parsed fields here")
+    ap.add_argument("--live", action="store_true",
+                    help="SELECT the tag and bulk-read it into the buffer first, instead of "
+                         "using whatever the last automatic read left there. Needs the tag "
+                         "lined up with the antenna; does not move the spool.")
     args = ap.parse_args()
 
     reader = args.slot // 2
     print("slot %d -> reader %d" % (args.slot, reader))
 
+    if args.live:
+        # op 6 SELECT then op 7 bulk page read. This is the deterministic route once the tag is
+        # physically lined up with the coil: it does not depend on the ACE choosing to re-scan,
+        # which it will not do while it holds a cached decode - and it does not clear that cache
+        # on eject either. op 7 returns 144 (0x90) as a BYTE COUNT, not a status.
+        sel = _op(reader, 6, 0)
+        cnt = _op(reader, 7, 0)
+        print("SELECT -> %s   bulk page read -> %s bytes" % (sel, cnt))
+        if sel not in (0, None):
+            print("  SELECT did not succeed: 3 = no tag in the field, 4 = two tags in range.")
+            print("  Line the tag up with the antenna and retry.")
+            return 2
+        if not cnt or cnt < 140:
+            print("  the read returned too few bytes - the tag moved out of the field")
+            return 2
+
     img, got = read_image(reader)
-    print("recovered %d/%d bytes" % (got, IMAGE_LEN))
+    print("recovered %d/%d bytes from the page buffer" % (got, IMAGE_LEN))
+    if args.live:
+        tail = read_tail(reader)
+        if tail:
+            print("recovered %d more bytes from pages %d+" % (len(tail), 40))
+            img = img + tail
     fmt, why = sniff(img)
     print("format: %s (%s)\n" % (fmt, why))
 
