@@ -29,6 +29,7 @@ MAGIC = bytes([0x61, 0xA5, 0x63, 0x5A, 0x65, 0xA5, 0x32, 0x5A])
 
 HOOK_UID = 0x0800E836        # movs r0,#6 ; b.n    -- the READFAILED exit
 HOOK_RC522 = 0x0800E7DA      # movs r0,#1 ; b.n    -- the index >= 4 rejection (dead path)
+HOOK_RAWTAG = 0x0800E842     # add.w lr,sp,#140    -- first instruction of the positional parse
 EPILOGUE = 0x0800E904
 SYMS = {
     "epilogue": EPILOGUE,
@@ -38,8 +39,12 @@ SYMS = {
     "rfid_select": 0x0800DEB6,
     "rfid_pageread": 0x0800E18C,
     "delay_ms": 0x08013C70,
+    "memcpy": 0x08008AA8,
+    "resume": 0x0800E846,     # the instruction after the one rawtag_stub displaces
 }
-VERSION_STRING = b"V1.1.3O"   # ACE2-Open; same length as V1.1.31 so the field layout is unchanged
+VERSION_STRING = b"V1.1.3X"   # UID stub + RC522 passthrough (with op 9) + raw-tag hook.
+                              # Same length as V1.1.31 so the field layout is unchanged.
+                              # O = the two-hook build; W = what shipped 2026-08-28; X adds rawtag.
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -114,6 +119,10 @@ def main():
     rc_stub = assemble(os.path.join(HERE, "rc522_stub.s"), rc_addr, args.tmp)
     body += rc_stub
 
+    raw_addr = BASE_ADDR + len(body)
+    raw_stub = assemble(os.path.join(HERE, "rawtag_stub.s"), raw_addr, args.tmp)
+    body += raw_stub
+
     o = HOOK_UID - BASE_ADDR
     if bytes(body[o:o + 4]) != bytes([0x06, 0x20, 0x64, 0xE0]):
         sys.exit("UID hook site does not match the expected instructions")
@@ -123,6 +132,11 @@ def main():
     if bytes(body[o:o + 2]) != bytes([0x01, 0x20]):
         sys.exit("RC522 hook site does not match the expected instructions")
     body[o:o + 4] = thumb_bw(HOOK_RC522, rc_addr)
+
+    o = HOOK_RAWTAG - BASE_ADDR
+    if bytes(body[o:o + 4]) != bytes([0x0D, 0xF1, 0x8C, 0x0E]):
+        sys.exit("raw-tag hook site does not match the expected instructions")
+    body[o:o + 4] = thumb_bw(HOOK_RAWTAG, raw_addr)
 
     i = body.find(b"V1.1.31\x00")
     if i < 0:
@@ -134,6 +148,7 @@ def main():
 
     print("uid stub    %4d bytes at 0x%08X" % (len(uid_stub), uid_addr))
     print("rc522 stub  %4d bytes at 0x%08X" % (len(rc_stub), rc_addr))
+    print("rawtag stub %4d bytes at 0x%08X" % (len(raw_stub), raw_addr))
     print("image       %d bytes, crc16/kermit 0x%04X" % (len(out), crc16_kermit(out)))
     print("magic last 8 bytes: %s  %s" % (out[-8:].hex(), "OK" if out[-8:] == MAGIC else "WRONG"))
     print("reports version: %s" % VERSION_STRING.decode())

@@ -19,8 +19,11 @@
 @         KNOWN DEFECT: takes no args, and writes 144 bytes at BUF+0 while op 4 reads BUF+64 with a
 @         6-bit offset -- so only dump bytes 64..127 (pages 20..35) can be read back, and the write
 @         clobbers the staged TX frame and the bit-length byte at BUF+128. Bits 15..14 of the packed
-@         word are free: a future op 9 reading BUF + ubfx(r5,8,8) would expose the whole buffer.
+@         word are free, which op 9 below now uses to expose the whole buffer.
 @   op 8  clear the cached tag record for slot arg1 -> 0
+@   op 9  read page-buffer byte at arg1 (FULL 8-bit offset, 0..255) -> byte
+@         The fix for the op7/op4 defect above, and how the host retrieves an image cached by
+@         rawtag_stub.s after a non-Anycubic tag is identified.
 @
 @ Staging buffer 0x20000704 (the firmware's own tag-page buffer; idle while background
 @ scanning is disabled): +0 TX/select scratch | +64 RX | +128 rx bit length.
@@ -49,6 +52,8 @@ rc522_stub:
         beq     op_rxbits
         cmp     r3, #8
         beq     op_clearcache
+        cmp     r3, #9
+        beq     op_bufread
 
         @ ops 0/1/3/6/7 need the per-reader context pointer
         movw    r0, #0x1604
@@ -137,6 +142,17 @@ op_rxread:
         movt    r0, #0x2000
         ubfx    r1, r5, #8, #6
         adds    r0, r0, #64
+        ldrb    r0, [r0, r1]
+        b       done
+
+op_bufread:
+        @ Read ANY byte of the page buffer, 0..255. op 4 cannot: it masks its offset to 6 bits
+        @ and starts at BUF+64, so it reaches only bytes 64..127 -- which is precisely the range
+        @ that does NOT contain the sku, brand or material pages. That is the op7/op4 defect
+        @ noted at the top of this file, and this is the one-instruction fix it predicted.
+        movw    r0, #0x0704
+        movt    r0, #0x2000
+        ubfx    r1, r5, #8, #8
         ldrb    r0, [r0, r1]
         b       done
 
