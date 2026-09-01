@@ -29,7 +29,7 @@ import urllib.request
 
 B = "http://10.49.9.130:7125"
 IMAGE_LEN = 144          # pages 4..39 - all the firmware's own bulk read (op 7) can reach
-TAIL_LAST_PAGE = 75      # keep walking past page 39: see read_tail()
+PAGE_CAP = 225           # NTAG216's last user page; the walk stops when the tag stops answering
 RAW_SENTINEL = 0x0202
 
 
@@ -84,22 +84,25 @@ def read_image(reader, length=IMAGE_LEN, batch=24):
     return bytes(out.get(i, 0) for i in range(length)), len(out)
 
 
-def read_tail(reader, first=40, last=TAIL_LAST_PAGE):
-    """Read pages beyond 39, one NTAG READ (4 pages) at a time.
+def read_all_pages(reader, first=4, last=PAGE_CAP):
+    """Read every page the tag will give us, and let the parser decide what it needs.
 
-    op 7 stops at page 39 because 144 bytes is all an NTAG213 holds - but a real OpenSpool tag
-    on a larger NTAG carries more. Measured on this machine: the NDEF TLV declares 0xAF = 175
-    bytes, and the JSON runs to 177. Everything up to "max_temp" fits in the first 144; the
-    IDENTITY does not:
+    Deliberately NOT bounded by the firmware's 144-byte bulk read. op 7 stops at page 39 because
+    that is all an NTAG213 holds, but tags are bigger than that and the useful field may sit
+    anywhere. Measured on this machine: a real OpenSpool tag declares an NDEF TLV of 0xAF = 175
+    bytes, and everything up to "max_temp" fits in the first 144 while the IDENTITY does not:
 
         ..."max_temp":"220","spool_id":26,"sm_id":26}
 
-    So a reader that stops where op 7 stops recovers the colour, material and temperatures and
-    misses the one field that says which spool this is.
+    A reader that stops where op 7 stops therefore recovers the colour, material and
+    temperatures and misses the one field that says which spool it is. Guessing a larger fixed
+    bound just moves the cliff, so this walks until the tag stops answering - which is the tag
+    telling us where its memory ends rather than us assuming it.
 
-    Re-SELECT before every READ: without it the tag stops answering after the first transceive
-    and the RX region still holds the previous reply, which looks exactly like a successful read
-    of the wrong page. The giveaway is the same 16 bytes repeating every four pages.
+    One NTAG READ returns 16 bytes (four pages). Re-SELECT before each one: without it the tag
+    stops answering after the first transceive while the RX region still holds the previous
+    reply, which is indistinguishable from a successful read of the wrong page. The giveaway is
+    the same 16 bytes repeating every four pages.
     """
     out = bytearray()
     for page in range(first, last + 1, 4):
@@ -109,7 +112,7 @@ def read_tail(reader, first=40, last=TAIL_LAST_PAGE):
         _op(reader, 3, 2, 0x0C)
         vals = [_op(reader, 9, 64 + i) for i in range(16)]
         if not any(v for v in vals if v):
-            break
+            break                      # end of memory, or the tag left the field
         out.extend(v or 0 for v in vals)
     return bytes(out)
 
@@ -180,17 +183,18 @@ def main():
             print("  the read returned too few bytes - the tag moved out of the field")
             return 2
 
-    img, got = read_image(reader)
-    print("recovered %d/%d bytes from the page buffer" % (got, IMAGE_LEN))
     if args.live:
-        tail = read_tail(reader)
-        if tail:
-            print("recovered %d more bytes from pages %d+" % (len(tail), 40))
-            img = img + tail
+        # Live: walk the whole tag. No 144-byte special case, no second code path.
+        img = read_all_pages(reader)
+        got = len(img)
+        print("read %d bytes (pages 4..%d) straight from the tag" % (got, 4 + got // 4 - 1))
+    else:
+        img, got = read_image(reader)
+        print("recovered %d/%d bytes from the page buffer" % (got, IMAGE_LEN))
     fmt, why = sniff(img)
     print("format: %s (%s)\n" % (fmt, why))
 
-    for off in range(0, IMAGE_LEN, 16):
+    for off in range(0, len(img), 16):
         chunk = img[off:off + 16]
         printable = "".join(chr(c) if 32 <= c < 127 else "." for c in chunk)
         print("  %3d  %-32s |%s|" % (4 + off // 4, binascii.hexlify(chunk).decode(), printable))

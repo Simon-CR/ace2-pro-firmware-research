@@ -58,6 +58,29 @@ def _u32(buf, off):
     return struct.unpack_from("<I", bytes(buf), off)[0] if off + 4 <= len(buf) else 0
 
 
+def uid_from_image(image, first_page=0):
+    """The tag's UID, when the image starts at page 0.
+
+    NTAG lays a 7-byte UID across the first two pages, split by a check byte:
+        page 0:  UID0 UID1 UID2 BCC0
+        page 1:  UID3 UID4 UID5 UID6
+    BCC0 is XOR of 0x88 and UID0..2, which is a free integrity check - if it does not match, we
+    are not looking at page 0 and the "UID" would be garbage.
+
+    Returns "" when the image does not start at page 0, because the firmware's own read starts
+    at page 4 and the UID is simply not in it. That is not a failure: the docs record that the
+    cascade captures the UID at scratch +13..+19 and the response builder then copies only page
+    data, so nothing host-side can recover it from a normal identify.
+    """
+    img = bytes(image)
+    if first_page != 0 or len(img) < 8:
+        return ""
+    uid = img[0:3] + img[4:8]
+    if (0x88 ^ img[0] ^ img[1] ^ img[2]) != img[3]:
+        return ""                      # BCC0 mismatch: this is not page 0
+    return "".join("%02X" % b for b in uid)
+
+
 def identify(image):
     """Name the layout from the bytes. Returns (format, why)."""
     img = bytes(image)
@@ -113,22 +136,30 @@ def _parse_anycubic(img):
 
 
 def _first_json(img):
-    """The first balanced {...}, tolerating the NDEF header before and padding after."""
+    """The first balanced {...} that actually PARSES, tolerating the NDEF header and padding.
+
+    Every candidate "{" is tried, not just the first one. An NDEF TLV is 0x03 followed by a
+    LENGTH BYTE, and that length byte can itself be 0x7B - which is "{". A payload that happens
+    to be 123 bytes long therefore puts a false opening brace two bytes into the image, and
+    anchoring on the first "{" then counts braces from the wrong place and never closes. Caught
+    on a synthetic openprinttag tag whose body was exactly 123 bytes; nothing about it is
+    synthetic, it would do the same on a real tag of that length.
+    """
     text = bytes(img).decode("latin-1", "replace")
     start = text.find("{")
-    if start < 0:
-        return None
-    depth = 0
-    for i, ch in enumerate(text[start:], start):
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                try:
-                    return json.loads(text[start:i + 1])
-                except ValueError:
-                    return None
+    while start >= 0:
+        depth = 0
+        for i, ch in enumerate(text[start:], start):
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    try:
+                        return json.loads(text[start:i + 1])
+                    except ValueError:
+                        break          # this "{" did not start a real object - try the next
+        start = text.find("{", start + 1)
     return None
 
 
@@ -215,24 +246,48 @@ def spool_from_record(rec):
 
 
 def resolve(rec, spools=None):
-    """Best identity available: (spool_id, how). `spools` is FilaMan's spool list, if reachable.
+    """Identity, by every route in order of preference. Returns (spool_id, how, backed).
 
-    SKU first - no network, same on both faces of a spool, works with the backend down. UID only
-    as a fallback, matched against BOTH rfid_uid and the previous_tag custom field, because a
-    spool tagged on both faces keeps its older UID there and either face must resolve to the same
-    spool.
+    `spools` is FilaMan's spool list when the backend is reachable, or None when it is not.
+    `backed` says whether the answer was confirmed against the backend, which is what decides
+    whether the caller may trust the backend's fields over the tag's.
+
+    THREE SCENARIOS, ALL OF WHICH MUST WORK, FOR EVERY FORMAT:
+
+      1. SKU matched against the backend. The tag carries the spool number, and the backend
+         confirms that spool exists. Best case: authoritative data, and the number itself needed
+         no network to obtain.
+      2. UID matched against the backend. The tag carries no spool number - a stock Anycubic or
+         Bambu tag, say - so identity comes from the UID, checked against BOTH rfid_uid and the
+         previous_tag custom field. Either face of a two-sided spool must land on the same spool.
+      3. Neither, or no backend at all. The tag's own fields still render the lane: colour,
+         material, temperatures. A tag that identifies a spool the backend has never heard of is
+         the same case - the number is real, it just cannot be confirmed.
+
+    A SKU that the backend does not recognise deliberately does NOT fall through to the UID: the
+    tag says which spool it is, and quietly binding a different one because a lookup missed would
+    be worse than saying so.
     """
     sid = spool_from_record(rec)
     if sid is not None:
-        return sid, "sku %r" % rec.get("sku")
+        if spools is None:
+            return sid, "sku %r (backend unreachable - unconfirmed)" % rec.get("sku"), False
+        for s in spools:
+            if s.get("id") == sid:
+                return sid, "sku %r" % rec.get("sku"), True
+        return sid, "sku %r (no such spool in the backend)" % rec.get("sku"), False
+
     uid = normalise_uid(rec.get("uid"))
     if uid and spools:
         for s in spools:
             if normalise_uid(s.get("rfid_uid")) == uid:
-                return s.get("id"), "rfid_uid"
+                return s.get("id"), "rfid_uid %s" % uid, True
             if normalise_uid((s.get("custom_fields") or {}).get("previous_tag")) == uid:
-                return s.get("id"), "previous_tag"
-    return None, "unresolved"
+                return s.get("id"), "previous_tag %s" % uid, True
+        return None, "uid %s not known to the backend" % uid, False
+    if uid:
+        return None, "uid %s (backend unreachable)" % uid, False
+    return None, "no spool number and no uid on this tag", False
 
 
 if __name__ == "__main__":
