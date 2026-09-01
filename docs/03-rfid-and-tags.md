@@ -143,19 +143,36 @@ Safety rules for any write:
 | Page read (`0x30`) | works | NAKed (needs auth) | works |
 | Page-4 header gate | `7B 00 65 00` → decoded | n/a | NDEF magic → fails the gate |
 | Stock firmware result | `SUCCESS` + full fields | `READFAILED (6)` | `READFAILED`-class |
-| With UID passthrough | unchanged | **UID in `sku`, version `0x0201`** | UID in `sku` |
+| With UID passthrough | unchanged | **UID in `sku`, version `0x0201`** | **NO — stub never fires, see below** |
 | Writable? | yes (it is your tag) | **never** | yes |
 
 The useful distinction: Bambu fails at the *read* stage (crypto), OpenSpool fails at the *format*
-stage. Both land on the UID path, which is why UID-keying covers every case without per-format
-decoders in firmware.
+stage.
+
+**CORRECTED 2026-09-01 — they do NOT both land on the UID path.** That was a prediction in this
+document and it is wrong, proven on hardware. The UID stub hooks **one** exit: the `READFAILED`
+(code 6) path, "card selected but the read was refused", which is what MIFARE crypto produces. An
+OpenSpool tag reads fine (`0x30` works, row 3 above) and fails *later*, at the page-4 header gate —
+a different exit, which the stub does not touch. So it falls through to the positional Anycubic
+parser and returns garbage as success. See "V1.1.3W" below.
+
+**The fix is a second hook on the format-gate exit**, reusing the same stub. Then UID-keying really
+does cover every case, which is what this paragraph originally claimed.
 
 ## V1.1.3W — the build that is actually running, and what it does (2026-09-01)
 
-**Undocumented until now.** The machine has been running `V1.1.3W` since at least 2026-08-31 (it
-appears in `11-operator-interface.md` and `12-panel-visual-design.md` only as an *observed* value).
-The documented builds are `V1.1.3O` (patches), `V1.1.3U` (first proven flash) and `V1.1.3M` (UID
-passthrough). **W is none of them and its behaviour was never recorded.**
+**Never recorded in this repo until now**, though it is in the 2026-08-28 session history:
+
+```
+19:32  Built: UID stub preserved at 0x080197A0, new 170-byte RC522 stub at 0x080197E0,
+       magic intact, CRC 0x833C
+19:50  1.1.3W flashed
+```
+
+**So `V1.1.3W` = the UID stub PLUS the RC522 passthrough** that exposes the firmware's own
+transceive routine at `0x0800F32C`. Both capabilities are present; tag writing should work on this
+build. It is the successor to `V1.1.3R` (first RC522 stub, which could not drive the RF layer by
+hand).
 
 Observed 2026-09-01 with an **OpenSpool NDEF tag** in lane 1, live on the machine:
 
@@ -173,7 +190,10 @@ class for a tag that fails the page-4 header gate, and the UID-passthrough patch
 - `material = ,"version":"1.0","t` is more of the same JSON, read at the material offset.
 - `temp`, `hotbed` and `color` are whatever bytes landed at those offsets.
 
-So W appears to **bypass or fail-open the page-4 header gate** without the UID formatting stub.
+**Why, given the UID stub IS in this build:** the stub hooks exactly one exit — `READFAILED`
+(code 6), which is what a Bambu tag's NAKed page read produces. An OpenSpool tag never reaches it.
+Its pages read fine; it fails at the **page-4 header gate**, a different exit that falls through to
+the positional parser. One hook, two failure modes, only one covered.
 
 ### Why that is the worst of the three outcomes
 
@@ -216,9 +236,12 @@ identified or replaced with a build that has it:
 - **An OpenSpool tag is worse than no tag on this build.** Remove it or overwrite it in Anycubic
   format until the firmware question is settled.
 
-### Open, and it matters
+### The actual fix
 
-**Nobody knows what `V1.1.3W` contains.** It is running on the machine, it is not stock, and no
-build record exists. Before any further firmware work: dump the running image and diff it against
-stock `V1.1.31` and against the `M` build, and record the result here. A device running an
-unidentified image is not a base to patch from.
+**Add a second hook on the page-4 header-gate exit**, branching to the same 64-byte UID stub at
+`0x080197A0` that already serves `READFAILED`. No new stub, no size growth beyond the 4-byte branch
+— the same edit shape that committed first time for the read path. Then OpenSpool and any other
+foreign NDEF tag return their UID exactly as Bambu tags do, and the host keys on it.
+
+Until then, on `V1.1.3W`: **an OpenSpool tag is worse than no tag.** Write Anycubic-format tags for
+spools you own (that path needs no firmware change at all), and leave the rest untagged.
