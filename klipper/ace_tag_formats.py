@@ -59,26 +59,36 @@ def _u32(buf, off):
 
 
 def uid_from_image(image, first_page=0):
-    """The tag's UID, when the image starts at page 0.
+    """The tag's UID, when the image starts at page/block 0.
 
-    NTAG lays a 7-byte UID across the first two pages, split by a check byte:
-        page 0:  UID0 UID1 UID2 BCC0
+    Two on-tag layouts carry the UID, and each has its own check byte:
+
+      7-byte NTAG cascade, UID split across the first two pages by a check byte -
+        page 0:  UID0 UID1 UID2 BCC0        BCC0 = 0x88 ^ UID0 ^ UID1 ^ UID2
         page 1:  UID3 UID4 UID5 UID6
-    BCC0 is XOR of 0x88 and UID0..2, which is a free integrity check - if it does not match, we
-    are not looking at page 0 and the "UID" would be garbage.
+      4-byte Mifare Classic manufacturer block, UID then a single check byte -
+        block 0: UID0 UID1 UID2 UID3 BCC    BCC  = UID0 ^ UID1 ^ UID2 ^ UID3
+      (a real Bambu block 0 is 89 93 34 FC D2 08 04 00 ... -> UID 899334FC, BCC 0xD2).
 
-    Returns "" when the image does not start at page 0, because the firmware's own read starts
-    at page 4 and the UID is simply not in it. That is not a failure: the docs record that the
-    cascade captures the UID at scratch +13..+19 and the response builder then copies only page
-    data, so nothing host-side can recover it from a normal identify.
+    DISAMBIGUATION. Both check bytes are validated; the layout is decided by which one holds,
+    trying 7-byte FIRST. A genuine 7-byte page 0 satisfies the cascade BCC, so it is returned
+    before the 4-byte test can fire; the 4-byte test only runs when the cascade BCC fails, which
+    is the case for a Mifare 4-byte block (its byte 3 is the last UID byte, not a cascade BCC).
+    The residual risk is a 4-byte block whose bytes happen to satisfy the cascade BCC (~1/256) -
+    accepted here, as the contract fixes the 7-byte-first order.
+
+    Returns "" when neither check byte validates (or the image does not start at page 0), because
+    the firmware's own read starts at page 4 and the UID is simply not in it - not a failure, just
+    nothing host-side to recover from a normal identify.
     """
     img = bytes(image)
-    if first_page != 0 or len(img) < 8:
+    if first_page != 0:
         return ""
-    uid = img[0:3] + img[4:8]
-    if (0x88 ^ img[0] ^ img[1] ^ img[2]) != img[3]:
-        return ""                      # BCC0 mismatch: this is not page 0
-    return "".join("%02X" % b for b in uid)
+    if len(img) >= 8 and (0x88 ^ img[0] ^ img[1] ^ img[2]) == img[3]:
+        return "".join("%02X" % b for b in img[0:3] + img[4:8])   # 7-byte cascade
+    if len(img) >= 5 and (img[0] ^ img[1] ^ img[2] ^ img[3]) == img[4]:
+        return "".join("%02X" % b for b in img[0:4])              # 4-byte Mifare Classic
+    return ""
 
 
 def identify(image):
@@ -305,6 +315,11 @@ def resolve(rec, spools=None):
     A SKU that the backend does not recognise deliberately does NOT fall through to the UID: the
     tag says which spool it is, and quietly binding a different one because a lookup missed would
     be worse than saying so.
+
+    R6 - the UID is matched against EVERY spool (both rfid_uid and the previous_tag custom field)
+    and ALL distinct spool ids that match are collected. More than one distinct id means the UID
+    is shared across spools in the backend, and there is no honest way to pick: it refuses rather
+    than binding the first one it happened to see.
     """
     sid = spool_from_record(rec)
     if sid is not None:
@@ -316,58 +331,197 @@ def resolve(rec, spools=None):
         return sid, "sku %r (no such spool in the backend)" % rec.get("sku"), False
 
     uid = normalise_uid(rec.get("uid"))
-    if uid and spools:
-        for s in spools:
-            if normalise_uid(s.get("rfid_uid")) == uid:
-                return s.get("id"), "rfid_uid %s" % uid, True
-            if normalise_uid((s.get("custom_fields") or {}).get("previous_tag")) == uid:
-                return s.get("id"), "previous_tag %s" % uid, True
-        return None, "uid %s not known to the backend" % uid, False
-    if uid:
+    if not uid:
+        return None, "no spool number and no uid on this tag", False
+    if spools is None:
         return None, "uid %s (backend unreachable)" % uid, False
-    return None, "no spool number and no uid on this tag", False
+    matches = {}                       # distinct spool id -> how it matched
+    for s in spools:
+        mid = s.get("id")
+        if mid is None:
+            continue
+        if normalise_uid(s.get("rfid_uid")) == uid:
+            matches.setdefault(mid, "rfid_uid %s" % uid)
+        elif normalise_uid((s.get("custom_fields") or {}).get("previous_tag")) == uid:
+            matches.setdefault(mid, "previous_tag %s" % uid)
+    ids = sorted(matches)
+    if len(ids) > 1:
+        return None, "uid %s ambiguous: spools %s - refusing to guess" % (uid, ids), False
+    if len(ids) == 1:
+        return ids[0], matches[ids[0]], True
+    return None, "uid %s not known to the backend" % uid, False
+
+
+def _ndef_tlv_length(img):
+    """(declared payload length, payload start offset) for an NDEF TLV, or None.
+
+    An NDEF-message TLV is 0x03 then a length: one byte for 0x00..0xFE, or the 0xFF escape
+    followed by a two-byte big-endian length. Returns None when the framing is not present.
+    """
+    if len(img) < 2 or img[0] != 0x03:
+        return None
+    if img[1] == 0xFF:
+        if len(img) < 4:
+            return None
+        return (img[2] << 8) | img[3], 4
+    return img[1], 2
+
+
+def ndef_is_intact(image):
+    """True iff an NDEF/JSON image is structurally coherent, not a torn/spliced buffer.
+
+    The raw op-9 walk takes ~2.88s and a background scan can splice it, handing back a buffer
+    whose halves came from different reads. Three checks catch that: it must start with the NDEF
+    TLV tag 0x03, the TLV's declared payload length must FIT inside the buffer we were handed (a
+    spliced/short read declares more than it delivers), and the payload must still parse as JSON
+    (whole, or repaired back to its last complete field). A bare-JSON image with no 0x03 TLV
+    framing is treated as not-intact - safe, since the caller then renders from the tag fields
+    rather than trusting the image for a bind.
+    """
+    img = bytes(image)
+    parsed = _ndef_tlv_length(img)
+    if parsed is None:
+        return False
+    length, start = parsed
+    if length <= 0 or start + length > len(img):
+        return False
+    payload = img[start:start + length]
+    return _first_json(payload) is not None or _repair_json(payload) is not None
+
+
+def image_is_intact(image):
+    """The single gate instance.py calls to decide "is this raw image safe to trust".
+
+    Dispatches by format: an Anycubic-magic image has its own fixed-layout integrity and is
+    trusted; an NDEF/JSON image is checked by ndef_is_intact; anything blank or unrecognised is
+    not trusted. Pure - no I/O, safe to call on the Klipper side before applying a raw image.
+    """
+    img = bytes(image)
+    if img[:4] == ANYCUBIC_MAGIC:
+        return True
+    fmt, _why = identify(img)
+    if fmt in ("openspool", "filaman", "openprinttag", "ndef-json", "ndef", "json"):
+        return ndef_is_intact(img)
+    return False
 
 
 if __name__ == "__main__":
     import os
+
+    results = []
+
+    def check(label, got, want):
+        good = got == want
+        print("  %-4s %-26s want %-20r got %r" % ("ok " if good else "FAIL", label, want, got))
+        results.append(good)
+
+    # --- Anycubic positional layout, from an inline fixture (no data file needed) ---
+    b = bytearray(144)
+    b[0:4] = ANYCUBIC_MAGIC
+    b[4:8] = b"SM24"
+    b[24:33] = b"Bambu Lab"
+    b[44:47] = b"PLA"
+    b[64:68] = struct.pack("<I", 0xF7D959FF)   # stored A,B,G,R -> reads R=F7 G=D9 B=59
+    b[80:82] = struct.pack("<H", 200)
+    b[82:84] = struct.pack("<H", 220)
+    b[100:102] = struct.pack("<H", 50)
+    b[102:104] = struct.pack("<H", 60)
+    b[104:106] = struct.pack("<H", 175)
+    b[108:112] = struct.pack("<I", 1000)
+    arec = parse(bytes(b))
+    for k, v in (("format", "anycubic"), ("sku", "SM24"), ("brand", "Bambu Lab"),
+                 ("material", "PLA"), ("color", "F7D959"), ("temp_min", 200),
+                 ("temp_max", 220), ("bed_min", 50), ("bed_max", 60),
+                 ("diameter", 1.75), ("total_g", 1000)):
+        check("anycubic.%s" % k, arec.get(k), v)
+    check("anycubic.resolve", resolve(arec)[0], 24)
+
+    # --- Optional: the same parse against the real saved dump, only when present ---
     here = os.path.dirname(os.path.abspath(__file__))
     dump = os.path.join(here, "..", "data", "anycubic_ntag_dump.json")
-    pages = json.load(open(dump))
-    def _tob(v):
-        # saved dumps carry pages either as hex strings or as byte lists
-        return binascii.unhexlify(v) if isinstance(v, str) else bytes(v)
-    img = b"".join(_tob(pages[str(p)]) for p in range(4, 40) if str(p) in pages)
+    if os.path.exists(dump):
+        pages = json.load(open(dump))
+        def _tob(v):
+            return binascii.unhexlify(v) if isinstance(v, str) else bytes(v)
+        dimg = b"".join(_tob(pages[str(p)]) for p in range(4, 40) if str(p) in pages)
+        drec = parse(dimg)
+        check("dump.sku", drec.get("sku"), "SM24")
+        check("dump.color", drec.get("color"), "F7D959")
+        check("dump.resolve", resolve(drec)[0], 24)
+    else:
+        print("  skip anycubic dump (../data/anycubic_ntag_dump.json absent)")
 
-    rec = parse(img)
-    ok = True
-    expect = {"format": "anycubic", "sku": "SM24", "brand": "Bambu Lab", "material": "PLA",
-              "color": "F7D959", "temp_min": 200, "temp_max": 220, "bed_min": 50,
-              "bed_max": 60, "diameter": 1.75, "total_g": 1000}
-    for k, v in expect.items():
-        got = rec.get(k)
-        flag = "ok " if got == v else "FAIL"
-        if got != v:
-            ok = False
-        print("  %-4s %-10s expected %-12r got %r" % (flag, k, v, got))
-    sid, how, _bk = resolve(rec)
-    print("  %-4s resolve    -> spool %r via %s" % ("ok " if sid == 24 else "FAIL", sid, how))
-    ok = ok and sid == 24
-
-    # A JSON tag must not be mistaken for Anycubic, and must still yield a spool via sku.
+    # --- A JSON/NDEF tag must not be mistaken for Anycubic, and still yields a spool via sku ---
     ndef = b"\x03\x2aapplication/json" + json.dumps(
         {"protocol": "openspool", "version": "1.0", "sku": "26",
          "type": "PLA", "brand": "Filaments.CA", "color_hex": "#4B2A17"}).encode()
     ndef = ndef.ljust(144, b"\x00")
     jrec = parse(ndef)
-    jsid, jhow, _bk = resolve(jrec)
-    for label, got, want in (("format", jrec["format"], "openspool"),
-                             ("material", jrec["material"], "PLA"),
-                             ("color", jrec["color"], "4B2A17"),
-                             ("spool", jsid, 26)):
-        flag = "ok " if got == want else "FAIL"
-        if got != want:
-            ok = False
-        print("  %-4s json.%-8s expected %-12r got %r" % (flag, label, want, got))
+    check("json.format", jrec["format"], "openspool")
+    check("json.material", jrec["material"], "PLA")
+    check("json.color", jrec["color"], "4B2A17")
+    check("json.spool", resolve(jrec)[0], 26)
 
-    print("\n%s" % ("ALL PASS" if ok else "FAILURES ABOVE"))
+    # --- R3: 4-byte UID from a real Bambu Mifare Classic block 0 ---
+    # Bytes 89 93 34 FC -> UID "899334FC"; byte 4 (0xD2) is the BCC and equals XOR(0x89..0xFC),
+    # which confirms byte 1 is 0x93. (The build brief's "893934FC" is a transcription slip - its
+    # own cited XOR uses 0x93, and 0x39 would make the BCC 0x78, not the 0xD2 in the dump.)
+    bambu0 = bytes([137, 147, 52, 252, 210, 8, 4, 0, 5, 225, 214, 83, 195, 200, 189, 144])
+    check("uid.4byte", uid_from_image(bambu0, first_page=0), "899334FC")
+    # 7-byte NTAG cascade still works (UID 04A27C70C52A81, BCC0 = 0x88^04^A2^7C = 0x52)
+    ntag = bytes([0x04, 0xA2, 0x7C, 0x52, 0x70, 0xC5, 0x2A, 0x81])
+    check("uid.7byte", uid_from_image(ntag, first_page=0), "04A27C70C52A81")
+    check("uid.garbage", uid_from_image(bytes([0, 1, 2, 3, 4, 5, 6, 7]), first_page=0), "")
+    check("uid.page!=0", uid_from_image(bambu0, first_page=4), "")
+
+    # --- R6/scenario-2: resolve a UID against a mock spools list (rfid_uid and previous_tag) ---
+    spools = [
+        {"id": 10, "rfid_uid": "04:A2:7C:70:C5:2A:81", "custom_fields": {}},
+        {"id": 26, "rfid_uid": "", "custom_fields": {"previous_tag": "89 93 34 FC"}},
+    ]
+    r1 = resolve({"sku": None, "uid": "04A27C70C52A81"}, spools)
+    check("resolve.rfid_uid.id", r1[0], 10)
+    check("resolve.rfid_uid.backed", r1[2], True)
+    check("resolve.rfid_uid.how", r1[1], "rfid_uid 04A27C70C52A81")
+    r2 = resolve({"sku": None, "uid": "899334FC"}, spools)
+    check("resolve.previous_tag.id", r2[0], 26)
+    check("resolve.previous_tag.backed", r2[2], True)
+    check("resolve.previous_tag.how", r2[1], "previous_tag 899334FC")
+    r3 = resolve({"sku": None, "uid": "DEADBEEF"}, spools)
+    check("resolve.uid.unknown.id", r3[0], None)
+    check("resolve.uid.unknown.backed", r3[2], False)
+
+    # --- R6: two spools share one UID -> refuse, never pick the first ---
+    ambig = [
+        {"id": 7, "rfid_uid": "DEADBEEF", "custom_fields": {}},
+        {"id": 9, "rfid_uid": "", "custom_fields": {"previous_tag": "DE:AD:BE:EF"}},
+    ]
+    ar = resolve({"sku": None, "uid": "DE AD BE EF"}, ambig)
+    check("ambiguous.id", ar[0], None)
+    check("ambiguous.backed", ar[2], False)
+    check("ambiguous.reason", ("ambiguous" in ar[1]) and ("[7, 9]" in ar[1]), True)
+    # The SAME spool matching on BOTH fields is one distinct id, not an ambiguity
+    dup = [{"id": 5, "rfid_uid": "CAFE", "custom_fields": {"previous_tag": "CA:FE"}}]
+    dr = resolve({"sku": None, "uid": "CAFE"}, dup)
+    check("dedup.id", dr[0], 5)
+    check("dedup.backed", dr[2], True)
+    # spools given but empty -> reachable-but-not-known; spools None -> unreachable
+    check("empty.not_known", "not known" in resolve({"sku": None, "uid": "CAFE"}, [])[1], True)
+    check("none.unreachable", "unreachable" in resolve({"sku": None, "uid": "CAFE"}, None)[1], True)
+
+    # --- R5: image_is_intact on intact vs torn NDEF, plus anycubic/blank/unknown ---
+    fbody = json.dumps({"protocol": "openspool", "version": "1.0", "sku": "26", "type": "PLA",
+                        "brand": "Filaments.CA", "color_hex": "4B2A17"}).encode()
+    payload = b"application/json" + fbody
+    intact = (bytes([0x03, len(payload)]) + payload + b"\xfe").ljust(200, b"\x00")
+    check("intact.ndef", image_is_intact(intact), True)
+    torn = bytes([0x03, len(payload)]) + payload[: len(payload) // 2]   # declared > delivered
+    check("torn.ndef", image_is_intact(torn), False)
+    check("intact.anycubic", image_is_intact(bytes(b)), True)
+    check("intact.blank", image_is_intact(bytes(16)), False)
+    check("intact.unknown", image_is_intact(b"\x99" * 16), False)
+
+    ok = all(results)
+    print("\n%s  (%d/%d checks passed)" % ("ALL PASS" if ok else "FAILURES ABOVE",
+                                           sum(results), len(results)))
     raise SystemExit(0 if ok else 1)
