@@ -183,8 +183,46 @@ _JSON_KEYS = {
 }
 
 
+def _repair_json(img):
+    """Best-effort parse of a TRUNCATED JSON object.
+
+    Not a nicety - a structural necessity. The firmware reads pages 4..39 = 144 bytes, and a
+    real FilaMan/OpenSpool message is 177: the closing brace sits at ~byte 176, so the head can
+    be recovered PERFECTLY and still never contain a complete object. Measured on this machine -
+    every field up to "max_temp" is present in the head; the brace and the identity are not.
+
+    Truncates back to the last complete "key": value pair and closes the object. Fields that
+    were cut off mid-value are dropped, never guessed.
+    """
+    text = bytes(img).decode("latin-1", "replace")
+    start = text.find("{")
+    while start >= 0:
+        best = None
+        depth = 0
+        for i, ch in enumerate(text[start:], start):
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            elif ch == "," and depth == 1:
+                try:
+                    best = json.loads(text[start:i] + "}")
+                except ValueError:
+                    pass
+        if best:
+            return best
+        start = text.find("{", start + 1)
+    return None
+
+
 def _parse_json_family(img):
     obj = _first_json(img)
+    if obj is None:
+        obj = _repair_json(img)
+        if obj is not None:
+            obj["_truncated"] = True
     if obj is None:
         return None
     lowered = {str(k).lower(): v for k, v in obj.items()}
@@ -311,7 +349,7 @@ if __name__ == "__main__":
         if got != v:
             ok = False
         print("  %-4s %-10s expected %-12r got %r" % (flag, k, v, got))
-    sid, how = resolve(rec)
+    sid, how, _bk = resolve(rec)
     print("  %-4s resolve    -> spool %r via %s" % ("ok " if sid == 24 else "FAIL", sid, how))
     ok = ok and sid == 24
 
@@ -321,7 +359,7 @@ if __name__ == "__main__":
          "type": "PLA", "brand": "Filaments.CA", "color_hex": "#4B2A17"}).encode()
     ndef = ndef.ljust(144, b"\x00")
     jrec = parse(ndef)
-    jsid, jhow = resolve(jrec)
+    jsid, jhow, _bk = resolve(jrec)
     for label, got, want in (("format", jrec["format"], "openspool"),
                              ("material", jrec["material"], "PLA"),
                              ("color", jrec["color"], "4B2A17"),
