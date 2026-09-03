@@ -67,7 +67,10 @@ python3 firmware/apply_patch.py --base ACE2_V1.1.31_20260306.bin --out ACE2-Open
 ```
 
 Both verify the base image, insert the stubs **before the 8-byte IAP magic trailer**, apply the
-hooks, and set the version string to `V1.1.3O`.
+hooks, and set the version string to whatever `VERSION_STRING` is in `firmware/build_patch.py` —
+currently **`V1.1.41`**. That string is the only reliable way to tell whether a flash actually
+committed, so if you change it, remember what you set it to. It must stay the same LENGTH as
+`V1.1.31` or the surrounding field layout shifts.
 
 ## Flash
 
@@ -84,10 +87,11 @@ hooks, and set the version string to `V1.1.3O`.
 4. **Verify what is actually running.** Do not trust the tool's success message:
 
    ```
-   GET_INFO -> version = V1.1.3O
+   GET_INFO -> version = V1.1.41
    ```
 
-   If it still says `V1.1.31`, the commit did not happen — power-cycle and try again.
+   (Or whatever you set `VERSION_STRING` to.) If it still says `V1.1.31`, the commit did not
+   happen — power-cycle and try again.
 
    The updater will print a spurious "timed out waiting for expected version" at the end, because
    it compares against the string passed to `--version`. That is cosmetic; the reported version is
