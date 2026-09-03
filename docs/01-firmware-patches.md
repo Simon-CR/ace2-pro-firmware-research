@@ -345,3 +345,47 @@ cannot carry it — `cmp r0, #4` at `0x0800E7D2` rejects anything above 3 before
 3. an additional response field, which means the stub builds protobuf itself — more invasive.
 
 (1) + (2) gives 19 bytes per call, 8 calls for a full image, and no protobuf work.
+
+## V1.1.41: the live read answered worse than the background one (2026-09-02)
+
+A foreign tag read through **cmd 68** came back `sku=None, version=0x0202`, while the *same tag*
+read moments later by the background worker resolved correctly via `rawtag_extract_stub`. No error,
+no log — the synchronous path just quietly returned less than the asynchronous one.
+
+The cause was **our own patch, not stock ROM**. `rawtag_stub`'s "not Anycubic" branch committed the
+`0x0202` sentinel and branched straight to `epilogue` (`0x0800E904`), so it never reached `resume`
+(`0x0800E846`) and therefore never reached the sm_id inject at `HOOK_CMD68` (`0x0800E8A2`) — which
+sits on the Anycubic-success path, *after* the native sku/version stores. Every foreign tag on the
+live-read path bypassed the inject by construction.
+
+That left the host to recover through the **op-9 raw walk**, which is the wrong tool for a
+synchronous caller: ~2.88s (144 reads x 0.02s), torn-prone (a firmware-side scan splices the R5
+buffer mid-walk), and cross-reader-contaminated (slot 3 has returned slot 0's `SM22`). Binding off
+it is exactly the wrong-bind the design forbids, and its latency is what defeated the motion-gated
+identify loop — the loop's synchronous check completed long before the fetch returned.
+
+**The fix** searches `0x20000704` for `sm_id` *before* committing the sentinel and, on a hit,
+answers like a native decode (`version 101` + `"SM<n>"`), skipping the `0x0202` commit entirely.
+On a miss the original raw path runs byte for byte, so nothing regresses for a genuinely
+unrecognised tag.
+
+Two facts make this safe, both verified by disassembly rather than assumed:
+
+- **cmd 68 reaches the same page read.** It calls `rfid_pageread` (`0x0800E18C`) at `0x0800E82E` —
+  there is no caller-specific variant — so the three extend-read pokes have already staged pages
+  4-51 (192 bytes) at `0x20000704` on this path too. The `sm_id` really is there to find.
+- **The preceding memcpy does not destroy it.** It copies the 140-byte local image back over the
+  first 140 bytes of `0x20000704` with identical data, never touching the 144-191 tail where
+  `sm_id` lives.
+
+The Anycubic branch is untouched: `beq` still replays the displaced `add.w lr, sp, #140` and
+resumes at `0x0800E846`.
+
+### The build was broken, and had to be fixed first
+
+`build_patch.py` could not complete at all on binutils 2.45: two absolute `b.w` literals
+(`0x0800FE3A` in the extract stub, `0x0800E8A6` in the cmd68 stub) had no `SYMS` entry and failed
+with `Unknown destination type (ARM/Thumb)` / `dangerous relocation`. Every other branch target in
+these stubs resolves through a named symbol, which only warns. Named them `extract_resume` and
+`cmd68_resume`. Same 4-byte encoding, so no stub changes size and no appended-tail address moves.
+

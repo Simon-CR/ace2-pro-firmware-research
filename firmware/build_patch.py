@@ -38,6 +38,8 @@ HOOK_EXTRACT = 0x0800FE36    # mov r6,r0 ; cmp r0,#140  -- just after the backgr
                              # the native pipeline to cmd-13's SKU. Reads the tag tail (past the
                              # 144-byte window) for the OpenSpool sm_id. Coexists with RAWCACHE
                              # (FE3C): non-overlapping 4-byte sites, FE3A left intact between them.
+HOOK_CMD68 = 0x0800E8A2      # add.w r0,r8,#88 -- cmd-68 response, AFTER the native sku/version
+                             # writes (E842 gets clobbered); sm_id inject on the live-read path.
 EPILOGUE = 0x0800E904
 SYMS = {
     "epilogue": EPILOGUE,
@@ -52,8 +54,10 @@ SYMS = {
     "memcpy": 0x08008AA8,
     "resume": 0x0800E846,     # the instruction after the one rawtag_stub displaces
     "cache_resume": 0x0800FE40,  # likewise for rawtag_cache_stub
+    "extract_resume": 0x0800FE3A,  # rawtag_extract_stub rejoins the original bcc.n here
+    "cmd68_resume": 0x0800E8A6,   # rawtag_cmd68_stub resumes here
 }
-VERSION_STRING = b"V1.1.3Z"   # UID stub + RC522 passthrough (op 9) + raw-tag hooks + sm_id inject.
+VERSION_STRING = b"V1.1.41"   # UID stub + RC522 passthrough (op 9) + raw-tag hooks + sm_id inject.
                               # Same length as V1.1.31 so the field layout is unchanged.
                               # O = two-hook; W = shipped 2026-08-28; X adds rawtag; Y = cache;
                               # Z adds the sm_id extraction+injection at HOOK_EXTRACT.
@@ -143,6 +147,10 @@ def main():
     extract_stub = assemble(os.path.join(HERE, "rawtag_extract_stub.s"), extract_addr, args.tmp)
     body += extract_stub
 
+    cmd68_addr = BASE_ADDR + len(body)
+    cmd68_stub = assemble(os.path.join(HERE, "rawtag_cmd68_stub.s"), cmd68_addr, args.tmp)
+    body += cmd68_stub
+
     o = HOOK_UID - BASE_ADDR
     if bytes(body[o:o + 4]) != bytes([0x06, 0x20, 0x64, 0xE0]):
         sys.exit("UID hook site does not match the expected instructions")
@@ -182,6 +190,11 @@ def main():
             sys.exit("extend-read poke 0x%08X: expected 0x%02X found 0x%02X" % (addr, want, body[o]))
         body[o] = new
 
+    o = HOOK_CMD68 - BASE_ADDR        # add.w r0,r8,#88 (08 f1 58 00)
+    if bytes(body[o:o + 4]) != bytes([0x08, 0xF1, 0x58, 0x00]):
+        sys.exit("cmd-68 inject hook site does not match the expected instructions")
+    body[o:o + 4] = thumb_bw(HOOK_CMD68, cmd68_addr)
+
     i = body.find(b"V1.1.31\x00")
     if i < 0:
         sys.exit("version string not found")
@@ -195,6 +208,7 @@ def main():
     print("rawtag stub %4d bytes at 0x%08X" % (len(raw_stub), raw_addr))
     print("cache stub  %4d bytes at 0x%08X" % (len(cache_stub), cache_addr))
     print("extract stub%4d bytes at 0x%08X" % (len(extract_stub), extract_addr))
+    print("cmd68 stub  %4d bytes at 0x%08X" % (len(cmd68_stub), cmd68_addr))
     print("image       %d bytes, crc16/kermit 0x%04X" % (len(out), crc16_kermit(out)))
     print("magic last 8 bytes: %s  %s" % (out[-8:].hex(), "OK" if out[-8:] == MAGIC else "WRONG"))
     print("reports version: %s" % VERSION_STRING.decode())

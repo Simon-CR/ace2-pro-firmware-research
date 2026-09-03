@@ -66,6 +66,30 @@ rawtag_stub:
         movt    r0, #0x2000             @ 0x20000704, the tag-page buffer
         add     r1, sp, #28
         bl      memcpy
+        @ OpenSpool/FilaMan IDENTITY INJECT. This branch is why a foreign tag read through
+        @ cmd-68 used to come back sku=None: it committed 0x0202 and jumped to the epilogue, so
+        @ the sm_id inject at 0x0800E8A2 was never reached and the host had to fall back to the
+        @ op-9 raw walk (~2.88s, torn-prone, cross-reader-contaminated). The extend-read fills
+        @ 0x20000704 with pages 4-51 on THIS path too (cmd-68 calls rfid_pageread 0x0800E18C -
+        @ verified by disassembly), and the memcpy above rewrites only the first ~140 bytes with
+        @ identical data, so sm_id in the tail survives. Find it and answer like a native decode
+        @ (version 101 + "SM<n>") so the host binds synchronously. Not found -> raw path, verbatim.
+        movw    r0, #0x0704
+        movt    r0, #0x2000             @ 0x20000704, pages 4-51 (192 bytes)
+        movs    r1, #192
+        bl      smid_find               @ r0 = digit ptr (0 if none), r1 = digit count
+        cmp     r0, #0
+        beq     .Lraw
+        add     r2, r4, #8              @ response sku field (19 bytes, NUL at r4+27)
+        bl      smid_build              @ "SM" + digits + NUL
+        movs    r0, #101                @ mark native so the host takes the SKU path
+        str     r0, [r4, #4]
+        movs    r0, #0
+        strb    r0, [r4, #27]           @ ensure the sku field is NUL-terminated
+        movs    r0, #0                  @ code = SUCCESS
+        b.w     epilogue
+
+.Lraw:
         movw    r0, #0x0202             @ sentinel: raw image cached, fetch with op 9
         str     r0, [r4, #4]            @ 32-bit, matching the handler's own store
         movs    r0, #0                  @ code = SUCCESS
@@ -75,3 +99,91 @@ rawtag_stub:
 anycubic:
         add.w   lr, sp, #140
         b.w     resume                  @ 0x0800E846
+
+@ ===========================================================================
+@ Duplicated from rawtag_cmd68_stub.s (build assembles each stub independently, no
+@ cross-linking). Byte-identical and proven. If either copy changes, change all of them.
+@ ===========================================================================
+
+        .global smid_find
+        .thumb_func
+smid_find:
+        push    {r4, lr}
+        add     r1, r0, r1
+        subs    r3, r1, #6
+.Lscan:
+        cmp     r0, r3
+        bhi     .Lnone
+        ldrb    r2, [r0]
+        cmp     r2, #0x73
+        bne     .Lnext
+        ldrb    r2, [r0, #1]
+        cmp     r2, #0x6d
+        bne     .Lnext
+        ldrb    r2, [r0, #2]
+        cmp     r2, #0x5f
+        bne     .Lnext
+        ldrb    r2, [r0, #3]
+        cmp     r2, #0x69
+        bne     .Lnext
+        ldrb    r2, [r0, #4]
+        cmp     r2, #0x64
+        beq     .Lkey
+.Lnext:
+        adds    r0, #1
+        b       .Lscan
+.Lkey:
+        adds    r0, #5
+.Lskip:
+        cmp     r0, r1
+        bhs     .Lnone
+        ldrb    r2, [r0]
+        cmp     r2, #0x7d
+        beq     .Lnone
+        cmp     r2, #0x30
+        blo     .Lskn
+        cmp     r2, #0x39
+        bls     .Ldig
+.Lskn:
+        adds    r0, #1
+        b       .Lskip
+.Ldig:
+        mov     r4, r0
+.Lcnt:
+        cmp     r0, r1
+        bhs     .Lend
+        ldrb    r2, [r0]
+        cmp     r2, #0x30
+        blo     .Lend
+        cmp     r2, #0x39
+        bhi     .Lend
+        adds    r0, #1
+        b       .Lcnt
+.Lend:
+        sub     r1, r0, r4
+        mov     r0, r4
+        pop     {r4, pc}
+.Lnone:
+        movs    r0, #0
+        movs    r1, #0
+        pop     {r4, pc}
+
+        .global smid_build
+        .thumb_func
+smid_build:
+        push    {r4, lr}
+        movs    r3, #0x53
+        strb    r3, [r2], #1
+        movs    r3, #0x4d
+        strb    r3, [r2], #1
+.Lcpy:
+        cmp     r1, #0
+        beq     .Lbnul
+        ldrb    r3, [r0], #1
+        strb    r3, [r2], #1
+        subs    r1, #1
+        b       .Lcpy
+.Lbnul:
+        movs    r3, #0
+        strb    r3, [r2]
+        pop     {r4, pc}

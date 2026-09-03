@@ -66,7 +66,7 @@ rawtag_extract_stub:
         pop     {r4, r5, r6, lr}
         mov     r6, r0                  @ replicate 0x0800FE36  (mov r6,r0)
         cmp     r0, #140                @ replicate 0x0800FE38  (flags for the native bcc)
-        b.w     0x0800FE3A              @ rejoin at the original bcc.n
+        b.w     extract_resume              @ rejoin at the original bcc.n
 
 @ ===========================================================================
 @ Hook-independent core (validated: assembles clean; smid_find == validate_extract.py).
