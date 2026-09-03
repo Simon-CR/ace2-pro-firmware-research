@@ -389,3 +389,45 @@ with `Unknown destination type (ARM/Thumb)` / `dangerous relocation`. Every othe
 these stubs resolves through a named symbol, which only warns. Named them `extract_resume` and
 `cmd68_resume`. Same 4-byte encoding, so no stub changes size and no appended-tail address moves.
 
+## V1.1.42: stop claiming a foreign tag is a native decode (2026-09-03)
+
+V1.1.41 injected an identity by writing `version = 101` and `sku = "SM<n>"`. That worked, and it
+was wrong.
+
+`101` is the **native Anycubic decode** marker. It means "this record was parsed from a tag in
+Anycubic's layout; every field in it is valid" — including nozzle and bed temperatures. But the
+inject only writes *version* and *sku*. Every other field is still the stock firmware's
+positional parse of a tag that is **not** in that layout, which is garbage by construction.
+Measured on a real OpenSpool tag: nozzle 28770 °C, hotbed min 8804 > max 8762, `sku` reading
+`application/json{"`.
+
+Our own host happened to be safe, because it independently distrusts those siblings. That is
+exactly the problem: the record was only safe if the consumer already knew not to believe it.
+**Any other consumer — an Anycubic printer being the obvious one — would have read a heat target
+out of it.** Worse than stock, arguably: stock also returns a garbage `sku`, which a validator
+might reject outright, whereas we handed it a clean, plausible `SM26` sitting next to the same
+garbage temperatures.
+
+So the fix is not to scrub the fields. It is to stop lying about what the record is:
+
+```
+0x0201  sku is a raw tag UID            (uid_stub)
+0x0202  non-Anycubic, raw image cached  (rawtag_stub)
+0x0203  identity injected: the sku is authoritative, NOTHING ELSE in this record is
+```
+
+All three inject sites now write `0x0203` instead of `101` — `rawtag_stub`'s non-Anycubic
+branch, `rawtag_extract_stub` (the background worker path) and `rawtag_cmd68_stub` (the live
+read). Verified in the built image at `0x08019940`, `0x08019A3E` and `0x08019B96`.
+
+**Why a sentinel is safer than zeroing the fields.** Zeroing would leave `version = 101` still
+asserting "native decode", so a consumer would trust a zero temperature rather than no
+temperature — and it needs the exact struct offsets, in a heater path, some of which are written
+*after* our hook. An unrecognised version, by contrast, is ignored by any consumer that does not
+know it. That is the correct default for a firmware whose conventions are ours alone.
+
+Host side: `classify_tag_version` gains `injected`, which trusts the sku, nulls the siblings
+before they can reach a heat target, and falls through to the normal bind. It still accepts the
+old `101 + clean SM<n>` shape, so a host on this build works with a V1.1.41 device — there is no
+flag day.
+

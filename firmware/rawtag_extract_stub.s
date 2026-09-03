@@ -58,7 +58,13 @@ rawtag_extract_stub:
         beq     .Lx_out                 @ no sm_id -> leave the native flow untouched
         add     r2, r5, #28             @ SKU field (raw page 5) -> record+288
         bl      smid_build              @ "SM" + digits + NUL
-        movs    r0, #101                @ mark native so the host takes the SKU path
+@ 0x0203 = "identity injected; the sku is real, EVERY other field in this record is the
+@ stock positional parse of a tag that is not in Anycubic's layout, i.e. garbage."
+@ We used to write 101 here, which means "valid native decode, trust everything" - a lie
+@ that only our own host knew to discount. Any other consumer (an Anycubic printer, most
+@ obviously) would have read a nozzle target out of that garbage. An unknown version is
+@ ignored by a consumer that does not know it, which is the safe default we want.
+        movw    r0, #0x0203             @ injected-identity sentinel, NOT a native decode
         strh    r0, [r5, #26]           @ version u16 -> record+286
 .Lx_out:
         ldr     r0, [sp, #0]            @ byte count

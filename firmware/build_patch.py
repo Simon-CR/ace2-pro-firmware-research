@@ -57,7 +57,7 @@ SYMS = {
     "extract_resume": 0x0800FE3A,  # rawtag_extract_stub rejoins the original bcc.n here
     "cmd68_resume": 0x0800E8A6,   # rawtag_cmd68_stub resumes here
 }
-VERSION_STRING = b"V1.1.41"   # UID stub + RC522 passthrough (op 9) + raw-tag hooks + sm_id inject.
+VERSION_STRING = b"V1.1.42"   # UID stub + RC522 passthrough (op 9) + raw-tag hooks + sm_id inject.
                               # Same length as V1.1.31 so the field layout is unchanged.
                               # O = two-hook; W = shipped 2026-08-28; X adds rawtag; Y = cache;
                               # Z adds the sm_id extraction+injection at HOOK_EXTRACT.

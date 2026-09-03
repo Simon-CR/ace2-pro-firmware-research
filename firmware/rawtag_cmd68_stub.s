@@ -39,8 +39,14 @@ rawtag_cmd68_stub:
         beq     .Lc_done
         add     r2, r4, #8              @ response sku field
         bl      smid_build              @ "SM" + digits + NUL
-        movs    r0, #101
-        str     r0, [r4, #4]            @ response version = 101 (native word store, matches E882)
+@ 0x0203 = "identity injected; the sku is real, EVERY other field in this record is the
+@ stock positional parse of a tag that is not in Anycubic's layout, i.e. garbage."
+@ We used to write 101 here, which means "valid native decode, trust everything" - a lie
+@ that only our own host knew to discount. Any other consumer (an Anycubic printer, most
+@ obviously) would have read a nozzle target out of that garbage. An unknown version is
+@ ignored by a consumer that does not know it, which is the safe default we want.
+        movw    r0, #0x0203
+        str     r0, [r4, #4]            @ response version (native word store, matches E882)
         movs    r0, #0
         strb    r0, [r4, #27]           @ ensure the 19-byte sku field's NUL terminator
 .Lc_done:

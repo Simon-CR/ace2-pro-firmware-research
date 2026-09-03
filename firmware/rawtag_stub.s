@@ -73,7 +73,7 @@ rawtag_stub:
         @ 0x20000704 with pages 4-51 on THIS path too (cmd-68 calls rfid_pageread 0x0800E18C -
         @ verified by disassembly), and the memcpy above rewrites only the first ~140 bytes with
         @ identical data, so sm_id in the tail survives. Find it and answer like a native decode
-        @ (version 101 + "SM<n>") so the host binds synchronously. Not found -> raw path, verbatim.
+        @ (0x0203 + "SM<n>") so the host binds synchronously. Not found -> raw path, verbatim.
         movw    r0, #0x0704
         movt    r0, #0x2000             @ 0x20000704, pages 4-51 (192 bytes)
         movs    r1, #192
@@ -82,7 +82,13 @@ rawtag_stub:
         beq     .Lraw
         add     r2, r4, #8              @ response sku field (19 bytes, NUL at r4+27)
         bl      smid_build              @ "SM" + digits + NUL
-        movs    r0, #101                @ mark native so the host takes the SKU path
+@ 0x0203 = "identity injected; the sku is real, EVERY other field in this record is the
+@ stock positional parse of a tag that is not in Anycubic's layout, i.e. garbage."
+@ We used to write 101 here, which means "valid native decode, trust everything" - a lie
+@ that only our own host knew to discount. Any other consumer (an Anycubic printer, most
+@ obviously) would have read a nozzle target out of that garbage. An unknown version is
+@ ignored by a consumer that does not know it, which is the safe default we want.
+        movw    r0, #0x0203             @ injected-identity sentinel, NOT a native decode
         str     r0, [r4, #4]
         movs    r0, #0
         strb    r0, [r4, #27]           @ ensure the sku field is NUL-terminated
