@@ -33,6 +33,10 @@ HOOK_RAWTAG = 0x0800E842     # add.w lr,sp,#140    -- cmd 68's positional parse 
 HOOK_RAWCACHE = 0x0800FE3C   # add.w lr,r5,#136    -- the BACKGROUND reader's positional parse.
                              # The only path that ever reads a tag on this machine: cmd 68
                              # answers code 3 even on lanes the ACE decodes fine by itself.
+HOOK_PAGEREAD = 0x0800E228   # movw r1,#0x704 -- the page-read copy/return epilogue. BOTH
+                             # extend-read failure branches are poked to land here, so gating
+                             # it on r7 is what stops a failed read from returning 144 with the
+                             # PREVIOUS tag still staged in the shared buffer.
 HOOK_EXTRACT = 0x0800FE36    # mov r6,r0 ; cmp r0,#140  -- just after the background page read.
                              # r5 == commit's memcpy source, so writing "SM<n>" to r5+28 rides
                              # the native pipeline to cmd-13's SKU. Reads the tag tail (past the
@@ -54,10 +58,13 @@ SYMS = {
     "memcpy": 0x08008AA8,
     "resume": 0x0800E846,     # the instruction after the one rawtag_stub displaces
     "cache_resume": 0x0800FE40,  # likewise for rawtag_cache_stub
+    "pageread_resume": 0x0800E22C,   # mid-epilogue, after the displaced movw
+    "pageread_fail": 0x0800E23C,     # "mov r0, sl" -- the stock failed-read return
     "extract_resume": 0x0800FE3A,  # rawtag_extract_stub rejoins the original bcc.n here
     "cmd68_resume": 0x0800E8A6,   # rawtag_cmd68_stub resumes here
 }
-VERSION_STRING = b"V1.1.42"   # UID stub + RC522 passthrough (op 9) + raw-tag hooks + sm_id inject.
+VERSION_STRING = b"V1.1.43"   # + page-read gate: a failed read no longer returns 144 with the
+                             # previous tag still in the shared buffer (the cross-lane identity bug).
                               # Same length as V1.1.31 so the field layout is unchanged.
                               # O = two-hook; W = shipped 2026-08-28; X adds rawtag; Y = cache;
                               # Z adds the sm_id extraction+injection at HOOK_EXTRACT.
@@ -151,6 +158,10 @@ def main():
     cmd68_stub = assemble(os.path.join(HERE, "rawtag_cmd68_stub.s"), cmd68_addr, args.tmp)
     body += cmd68_stub
 
+    pageread_addr = BASE_ADDR + len(body)
+    pageread_stub = assemble(os.path.join(HERE, "pageread_gate_stub.s"), pageread_addr, args.tmp)
+    body += pageread_stub
+
     o = HOOK_UID - BASE_ADDR
     if bytes(body[o:o + 4]) != bytes([0x06, 0x20, 0x64, 0xE0]):
         sys.exit("UID hook site does not match the expected instructions")
@@ -182,6 +193,15 @@ def main():
     # which returns the hardcoded 144 (>=140, callers still pass). ALL THREE bytes together or
     # none - the loop bound alone would turn every NTAG213 read into a hard failure. Addresses and
     # bytes byte-verified against the stock .bin (argus, 2026-09-02).
+    #
+    # THE REDIRECT ALONE IS BLIND, WHICH IS WHY HOOK_PAGEREAD EXISTS. It tolerates a failure at
+    # ANY block, including the first, so a read that got nothing still returns 144 while the
+    # shared buffer holds the PREVIOUS tag - and the failing lane silently inherits its
+    # neighbour's identity and caches it until eject (measured 2026-09-03/04: T1 repeatedly
+    # returning T2's SM24, same firmware/spool/tag, varying only with scan order). The gate stub
+    # at 0x800e228 checks r7, which at a failure holds the bytes actually read, and sends a short
+    # read to the stock failure return instead. Keep the pokes AND the gate: the pokes route
+    # failures somewhere the gate can judge them.
     for addr, want, new in ((0x0800E220, 0x7C, 0xAC),   # cmp r7,#124 -> #172 : 12 iterations
                             (0x0800E216, 0x88, 0x38),   # cbnz r0 fail-target -> 0x800e228
                             (0x0800E21C, 0x0E, 0x04)):   # bne  fail-target -> 0x800e228
@@ -189,6 +209,11 @@ def main():
         if body[o] != want:
             sys.exit("extend-read poke 0x%08X: expected 0x%02X found 0x%02X" % (addr, want, body[o]))
         body[o] = new
+
+    o = HOOK_PAGEREAD - BASE_ADDR     # movw r1,#0x704 (40 f2 04 71)
+    if bytes(body[o:o + 4]) != bytes([0x40, 0xF2, 0x04, 0x71]):
+        sys.exit("page-read gate hook site does not match the expected instructions")
+    body[o:o + 4] = thumb_bw(HOOK_PAGEREAD, pageread_addr)
 
     o = HOOK_CMD68 - BASE_ADDR        # add.w r0,r8,#88 (08 f1 58 00)
     if bytes(body[o:o + 4]) != bytes([0x08, 0xF1, 0x58, 0x00]):
