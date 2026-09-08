@@ -95,9 +95,66 @@ The tag decoder module (`ace_tag_formats.py`) contains pure functions that extra
 
 ---
 
-## 4. Porting Steps for Snapmaker U1
+## 4. Filament Path Sensor Topology & Motion Invariants
 
-To port this setup to the Snapmaker U1:
+Every Klipper multi-material integration must account for physical sensor distribution and kinematic constraints (such as bed-moving-in-Z machines vs gantry-moving machines).
+
+### Physical Sensor Topology (ACE to Toolhead)
+
+```
+[ ACE Slot Entry ] ──(optical switch: CHN_INSERT_0..3)
+       │
+[ Feed Motor Gears ]
+       │
+[ Internal Buffer ] ──(mechanical deflection switches: BUF_FEED, BUF_BACK - ASSIST ONLY)
+       │
+[ ACE Unit Outlet ]
+       │
+       ▼  ~954mm 100% PASSIVE PTFE BOWDEN TUBE (ZERO PRESENCE SENSORS)
+[ 4-in-1 Hub ] ───────(microswitch: hub_detect + encoder: ace_hub_encoder)
+       │
+       ▼  ~650mm PASSIVE PTFE BOWDEN TUBE
+[ Toolhead Entry ] ───(switch: toolhead_entry)
+       │
+[ Extruder Gears ] ───(turning nip: passes filament only when rotating)
+       │
+[ Post-Gear Sensor ] ─(switch: toolhead_postgear, 5.6mm above blade)
+       │
+[ Cutter Blade ] ─────(Crossbow / Boomerang / mechanical cutter, 46.1mm above nozzle)
+       │
+[ Melt Zone ] ────────(Rapido / Volcano / Hotend, 22mm melt chamber, nozzle tip @ 0mm)
+```
+
+1. **Zero Sensors in Bowden Tube**:
+   Between `CHN_INSERT_0..3` and `hub_detect`, there are **zero presence switches**. The Bowden tube is 100% passive PTFE.
+2. **Buffer Switches are NOT Distance Sensors**:
+   The internal ACE deflection switches (`BUF_FEED`, `BUF_BACK`) detect physical loop flex and spring tension to throttle feed/rollback assist motor speeds. They do not track distance or presence along the tube.
+
+### Calibration & Motion Rules
+
+1. **Bowden Calibration on Full Gate Entry Only**:
+   - Bowden path calibration (`ace_path_calibrate.py`) updates the running nominal length ONLY on fresh entries from the gate (`start <= 100mm`) when the strand trips `hub_detect`.
+   - Normalizing lanes already staged in the Bowden tube (`start > 100mm`) strictly re-anchors the park datum (`hub_detect - 50mm`) without adding commanded length to the calibration history. This permanently prevents PTFE creep inflation.
+   - All calibration measurements are smoothed using a rolling 95th-percentile filter over the last $N=10$ samples (`ace_cal_ptfe_history`).
+
+2. **Drying / Roasting (Dry-roll) Direction Invariant**:
+   - When baking/drying spools, the dry-roll routine sweeps filament back and forth inside the tube and buffer to prevent flat spots and heat evenly.
+   - **Critical Invariant:** Dry-roll sweeps must **ALWAYS begin with a retraction (away from the hub, towards the spool/buffer)**. Because motion starts backwards, an error of $\pm 100\text{mm}$ in estimated tube length is completely harmless and will never drive filament into the hub or toolhead.
+
+3. **Cold Idle Toolchanges & Self-Toolchanges (Zero Unrequested G28)**:
+   - On printers where the bed moves in Z (e.g. Voron Trident), an unrequested `G28` drives the bed toward the nozzle and risks crashing into parts or bed hardware.
+   - **Self-Toolchange (`current_tool == tool_index`):** When idle and the strand is parked at post-gear (`filament_parked == 1`, `filament_loaded_hot == 0`), commanding `T<current>` confirms `ACE: Tool T{tool_index} is already active (parked at post-gear)` and returns immediately without homing or unparking.
+   - **Cold-Parked Toolchange:** When switching tools while idle, an outgoing cold-parked tool sitting at `toolhead_postgear` (5.6mm above the cutter blade) is extracted cold via `_tandem_extract` (extruder motor reverse + ACE rollback). It requires **zero toolhead XY motion, zero nozzle heating, and zero Crossbow cut**. The incoming tool is fed cold to post-gear. Neither operation requires homed axes.
+   - **Hot Meltzone Toolchange:** If and only if the outgoing strand is hot in the melt zone (`filament_loaded_hot == 1`), the toolhead must move to the cutter and purge bucket, which requires homed XY axes.
+
+4. **Cutter Macro Pre-Check Invariant**:
+   `CROSSBOW_CUT_TIP` evaluates absence (`not post`) and cold-parked state (`hot == 0 and svv.filament_parked == 1`) *before* demanding homed axes. If the strand is already parked and shaped in the cold zone, it skips the cut cleanly (`already parked and formed - nothing to cut, skipping`) without raising an unhomed axes exception.
+
+---
+
+## 5. Porting Steps for Snapmaker U1 & Custom Printers
+
+To port this setup to the Snapmaker U1 or another Klipper printer:
 
 1. **Copy Driver Extras**:
    Copy `extras/ace/` into your Klipper installation:
