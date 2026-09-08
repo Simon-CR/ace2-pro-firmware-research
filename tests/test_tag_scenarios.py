@@ -145,6 +145,36 @@ check("bambu: uid -> spool 7", sid == 7 and backed, how)
 sid, how, backed = f.resolve(rec, None)
 check("bambu: unresolved with no backend, honestly", sid is None and not backed, how)
 
+print("\nSCENARIO 3d - Multi-vendor on-tag data extraction when backend is unavailable")
+# 1. Bambu Lab on-tag metadata extraction
+bambu_raw = b"GFA01" + b"\x00" * 27
+b_rec = f.parse(bambu_raw)
+b_sid, b_how, b_backed = f.resolve(b_rec, None)
+check("bambu: brand on tag preserved", b_rec.get("brand") == "Bambu Lab", b_rec.get("brand"))
+check("bambu: material on tag preserved", b_rec.get("material") == "PLA Matte", b_rec.get("material"))
+check("bambu: name formatted from tag", b_rec.get("name") == "Bambu Lab PLA Matte", b_rec.get("name"))
+check("bambu: temps on tag preserved", b_rec.get("temp_min") == 190 and b_rec.get("temp_max") == 230,
+      f"{b_rec.get('temp_min')}-{b_rec.get('temp_max')}")
+
+# 2. Creality CFS on-tag metadata extraction
+creality_raw = b"CR-PLA:#FF0000:210:60:batch99"
+c_rec = f.parse(creality_raw)
+c_sid, c_how, c_backed = f.resolve(c_rec, None)
+check("creality: brand preserved", c_rec.get("brand") == "Creality", c_rec.get("brand"))
+check("creality: material preserved", c_rec.get("material") == "PLA", c_rec.get("material"))
+check("creality: color preserved", c_rec.get("color") == "FF0000", c_rec.get("color"))
+check("creality: name formatted", c_rec.get("name") == "Creality PLA", c_rec.get("name"))
+
+# 3. Prusament on-tag metadata extraction
+prusa_raw = b"Prusament PETG #00FF88 240C"
+p_rec = f.parse(prusa_raw)
+p_sid, p_how, p_backed = f.resolve(p_rec, None)
+check("prusament: brand preserved", p_rec.get("brand") == "Prusament", p_rec.get("brand"))
+check("prusament: material preserved", p_rec.get("material") == "PETG", p_rec.get("material"))
+check("prusament: color preserved", p_rec.get("color") == "00FF88", p_rec.get("color"))
+check("prusament: name formatted", p_rec.get("name") == "Prusament PETG", p_rec.get("name"))
+
 bad = [r for r in results if not r[1]]
 print("\n%d checks, %d failed" % (len(results), len(bad)))
 raise SystemExit(1 if bad else 0)
+

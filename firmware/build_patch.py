@@ -61,11 +61,11 @@ SYMS = {
     "pageread_resume": 0x0800E22C,   # mid-epilogue, after the displaced movw
     "pageread_fail": 0x0800E23C,     # "mov r0, sl" -- the stock failed-read return
     "extract_resume": 0x0800FE3A,  # rawtag_extract_stub rejoins the original bcc.n here
+    "scan_exit": 0x0800FE98,       # background scan success exit (bypasses Anycubic positional parse)
     "cmd68_resume": 0x0800E8A6,   # rawtag_cmd68_stub resumes here
 }
-VERSION_STRING = b"V1.1.43"   # + page-read gate: a failed read no longer returns 144 with the
-                             # previous tag still in the shared buffer (the cross-lane identity bug).
-                              # Same length as V1.1.31 so the field layout is unchanged.
+VERSION_STRING = b"V1.1.44"   # + autonomous Bambu UID capture on background scan path.
+                             # Same length as V1.1.31 so the field layout is unchanged.
                               # O = two-hook; W = shipped 2026-08-28; X adds rawtag; Y = cache;
                               # Z adds the sm_id extraction+injection at HOOK_EXTRACT.
 

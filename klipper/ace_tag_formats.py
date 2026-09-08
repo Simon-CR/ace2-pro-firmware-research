@@ -22,11 +22,14 @@ in three mutually incompatible formats, so any UID comparison must normalise fir
 """
 
 import binascii
+import hashlib
+import hmac
 import json
 import re
 import struct
 
 ANYCUBIC_MAGIC = b"\x7b\x00\x65\x00"      # u16 123 (magic), u16 101 (version)
+BAMBU_SALT = bytes([0x9a, 0x75, 0x9c, 0xf2, 0xc4, 0xf7, 0xca, 0xff, 0x22, 0x2c, 0xb9, 0x76, 0x9b, 0x41, 0xbc, 0x96])
 SKU_RE = re.compile(r"^SM(\d{1,7})$", re.I)
 
 
@@ -96,20 +99,39 @@ def identify(image):
     img = bytes(image)
     if img[:4] == ANYCUBIC_MAGIC:
         return "anycubic", "page 4 magic 123 / version 101"
+    text = img.decode("latin-1", "replace")
+    low = text.lower()
     if img[:1] == b"\x03":                      # NDEF TLV: 0x03 <len> <record...>
-        text = img.decode("latin-1", "replace")
-        low = text.lower()
         if "openspool" in low:
             return "openspool", "NDEF TLV + openspool protocol marker"
         if "filaman" in low:
             return "filaman", "NDEF TLV + filaman marker"
-        if "openprinttag" in low or "opt" in low and '"opt' in low:
+        if "openprinttag" in low or ("opt" in low and '"opt' in low):
             return "openprinttag", "NDEF TLV + openprinttag marker"
         if "application/json" in text:
             return "ndef-json", "NDEF TLV + application/json MIME record"
         return "ndef", "NDEF TLV, record type not recognised"
     if b"{" in img and b'"' in img:
+        if "openspool" in low:
+            return "openspool", "JSON openspool protocol marker"
+        if "openprinttag" in low or "opentag" in low:
+            return "openprinttag", "JSON openprinttag marker"
         return "json", "JSON-looking content with no NDEF TLV"
+    # Creality CFS tag signature (Sector 1 Blocks 4-6)
+    if any(k in low for k in ("creality", "cr-pla", "cr-petg", "cr-abs", "cr-tpu", "hyper pla", "hyper-pla", "ender-pla")):
+        return "creality", "Creality CFS sector signature detected"
+    # Bambu Lab MIFARE Classic signature (tray_info_idx GFA/GFB/GFG/GFS/GFN/GFU or Bambu text)
+    if any(k in low for k in ("bambu", "bambulab", "bambu lab")) or re.search(r"\bGF[ABCGNSU][0-9]{2}\b", text):
+        return "bambu", "Bambu Lab MIFARE tag signature detected"
+    if len(img) >= 32:
+        b1_prefix = img[16:21].decode("ascii", "replace")
+        if re.match(r"^GF[ABCGNSU][0-9]{2}$", b1_prefix):
+            return "bambu", "Bambu Lab tray_info_idx in Block 1"
+    # Prusament tag signature
+    if "prusament" in low or "prusa research" in low:
+        return "prusament", "Prusament RFID signature detected"
+    if len(img) >= 5 and (img[0] ^ img[1] ^ img[2] ^ img[3]) == img[4] and any(img[:4]):
+        return "mifare-classic", "4-byte Mifare Classic block 0 (BCC verified)"
     if not any(img):
         return "blank", "all zeroes"
     return "unknown", "no recognised signature"
@@ -139,22 +161,230 @@ def _parse_anycubic(img):
         "temp_max": _u16(img, 82) or None,
         "bed_min": _u16(img, 100) or None,
         "bed_max": _u16(img, 102) or None,
-        "diameter": (_u16(img, 104) / 100.0) or None,
+        "diameter": _u16(img, 104) / 100.0 if _u16(img, 104) else None,
         "total_g": _u32(img, 108) or None,
     }
     return rec
 
 
-def _first_json(img):
-    """The first balanced {...} that actually PARSES, tolerating the NDEF header and padding.
+def _parse_creality(img):
+    """Parse Creality CFS tag payload (Sector 1 ASCII string or colon-separated fields)."""
+    text = bytes(img).decode("latin-1", "replace")
+    rec = {"brand": "Creality", "material": None, "color": None, "temp_min": None,
+           "temp_max": None, "bed_min": None, "bed_max": None}
+    low = text.lower()
+    if "hyper" in low and "pla" in low:
+        rec["material"] = "Hyper PLA"
+        rec["temp_min"], rec["temp_max"], rec["bed_min"], rec["bed_max"] = 190, 230, 45, 60
+    elif "cr-pla" in low or "pla" in low:
+        rec["material"] = "PLA"
+        rec["temp_min"], rec["temp_max"], rec["bed_min"], rec["bed_max"] = 190, 230, 45, 60
+    elif "cr-petg" in low or "petg" in low:
+        rec["material"] = "PETG"
+        rec["temp_min"], rec["temp_max"], rec["bed_min"], rec["bed_max"] = 230, 250, 70, 85
+    elif "cr-abs" in low or "abs" in low:
+        rec["material"] = "ABS"
+        rec["temp_min"], rec["temp_max"], rec["bed_min"], rec["bed_max"] = 240, 260, 90, 110
+    elif "cr-tpu" in low or "tpu" in low:
+        rec["material"] = "TPU"
+        rec["temp_min"], rec["temp_max"], rec["bed_min"], rec["bed_max"] = 210, 230, 30, 60
 
-    Every candidate "{" is tried, not just the first one. An NDEF TLV is 0x03 followed by a
-    LENGTH BYTE, and that length byte can itself be 0x7B - which is "{". A payload that happens
-    to be 123 bytes long therefore puts a false opening brace two bytes into the image, and
-    anchoring on the first "{" then counts braces from the wrong place and never closes. Caught
-    on a synthetic openprinttag tag whose body was exactly 123 bytes; nothing about it is
-    synthetic, it would do the same on a real tag of that length.
-    """
+    color_match = re.search(r"#?([0-9A-Fa-f]{6})\b", text)
+    if color_match:
+        rec["color"] = color_match.group(1).upper()
+    return rec
+
+
+def bambu_kdf(uid_bytes, sector=0):
+    """Derive Bambu MIFARE Classic Key A and Key B for a given sector using HKDF-SHA256."""
+    uid_b = bytes(uid_bytes)[:4]
+    prk = hmac.new(BAMBU_SALT, uid_b, hashlib.sha256).digest()
+    sec_byte = bytes([int(sector) & 0xFF])
+    key_a = hmac.new(prk, b"RFID-A\0" + sec_byte, hashlib.sha256).digest()[:6]
+    key_b = hmac.new(prk, b"RFID-B\0" + sec_byte, hashlib.sha256).digest()[:6]
+    return key_a, key_b
+
+
+BAMBU_CATALOG = {
+    # PLA Family
+    "GFA00": {"material": "PLA Basic", "temp_min": 190, "temp_max": 230, "bed_min": 45, "bed_max": 60},
+    "GFA01": {"material": "PLA Matte", "temp_min": 190, "temp_max": 230, "bed_min": 45, "bed_max": 60},
+    "GFA02": {"material": "PLA Metal", "temp_min": 190, "temp_max": 230, "bed_min": 45, "bed_max": 60},
+    "GFA03": {"material": "PLA Silk", "temp_min": 200, "temp_max": 240, "bed_min": 45, "bed_max": 60},
+    "GFA05": {"material": "PLA Tough", "temp_min": 190, "temp_max": 230, "bed_min": 45, "bed_max": 60},
+    "GFA07": {"material": "PLA Galaxy", "temp_min": 190, "temp_max": 230, "bed_min": 45, "bed_max": 60},
+    "GFA08": {"material": "PLA Aero", "temp_min": 220, "temp_max": 250, "bed_min": 45, "bed_max": 60},
+    "GFA09": {"material": "PLA Marble", "temp_min": 190, "temp_max": 230, "bed_min": 45, "bed_max": 60},
+    "GFA50": {"material": "PLA-CF", "temp_min": 210, "temp_max": 240, "bed_min": 45, "bed_max": 60},
+    # PETG Family
+    "GFG00": {"material": "PETG Basic", "temp_min": 230, "temp_max": 260, "bed_min": 70, "bed_max": 80},
+    "GFG01": {"material": "PETG Translucent", "temp_min": 230, "temp_max": 260, "bed_min": 70, "bed_max": 80},
+    "GFG50": {"material": "PETG-CF", "temp_min": 240, "temp_max": 270, "bed_min": 70, "bed_max": 85},
+    # ABS / ASA Family
+    "GFB00": {"material": "ABS", "temp_min": 240, "temp_max": 270, "bed_min": 90, "bed_max": 100},
+    "GFB01": {"material": "ASA", "temp_min": 250, "temp_max": 280, "bed_min": 90, "bed_max": 100},
+    "GFB02": {"material": "PC", "temp_min": 260, "temp_max": 290, "bed_min": 90, "bed_max": 110},
+    # TPU Family
+    "GFS00": {"material": "TPU 95A", "temp_min": 220, "temp_max": 240, "bed_min": 35, "bed_max": 50},
+    "GFS01": {"material": "TPU 95A HF", "temp_min": 220, "temp_max": 240, "bed_min": 35, "bed_max": 50},
+    # Engineering / Carbon Fiber
+    "GFN03": {"material": "PA6-CF", "temp_min": 280, "temp_max": 300, "bed_min": 90, "bed_max": 110},
+    "GFN05": {"material": "PAHT-CF", "temp_min": 280, "temp_max": 300, "bed_min": 90, "bed_max": 110},
+    "GFC00": {"material": "PC", "temp_min": 260, "temp_max": 290, "bed_min": 90, "bed_max": 110},
+    # Support
+    "GFU01": {"material": "Support for PLA", "temp_min": 190, "temp_max": 230, "bed_min": 45, "bed_max": 60},
+    "GFU02": {"material": "Support for PA/PET", "temp_min": 260, "temp_max": 280, "bed_min": 80, "bed_max": 90},
+}
+
+
+def _parse_bambu(img):
+    """Parse Bambu Lab tag data from MIFARE Classic blocks or raw image."""
+    raw = bytes(img)
+    text = raw.decode("latin-1", "replace")
+    rec = {
+        "brand": "Bambu Lab",
+        "material": None,
+        "color": None,
+        "temp_min": None,
+        "temp_max": None,
+        "bed_min": None,
+        "bed_max": None,
+        "diameter": 1.75,
+        "total_g": 1000,
+        "tray_info_idx": None,
+    }
+
+    # 1. Check for tray_info_idx in text or Block 1 (bytes 16..31)
+    idx_match = re.search(r"\b(GF[ABCGNSU][0-9]{2})\b", text)
+    tray_idx = None
+    if idx_match:
+        tray_idx = idx_match.group(1)
+    elif len(raw) >= 32:
+        cand = raw[16:21].decode("ascii", "replace")
+        if re.match(r"^GF[ABCGNSU][0-9]{2}$", cand):
+            tray_idx = cand
+
+    if tray_idx:
+        rec["tray_info_idx"] = tray_idx
+        if tray_idx in BAMBU_CATALOG:
+            cat = BAMBU_CATALOG[tray_idx]
+            rec["material"] = cat["material"]
+            rec["temp_min"] = cat["temp_min"]
+            rec["temp_max"] = cat["temp_max"]
+            rec["bed_min"] = cat["bed_min"]
+            rec["bed_max"] = cat["bed_max"]
+
+    # 2. Binary sector mapping (Sector 1 Blocks 4, 5, 6)
+    b4_off = None
+    if len(raw) >= 112:
+        b4_off = 64
+    elif len(raw) >= 48 and not any(raw[:4]):
+        b4_off = 0
+
+    if b4_off is not None:
+        b4 = _cstr(raw, b4_off, 16)
+        if b4 and any(c.isalnum() for c in b4):
+            rec["material"] = b4
+
+        # Block 5: Weight (0:2), RGBA (2:6), Diameter (6:8)
+        b5_off = b4_off + 16
+        w = _u16(raw, b5_off)
+        if 200 <= w <= 5000:
+            rec["total_g"] = w
+        r, g, b = raw[b5_off + 2], raw[b5_off + 3], raw[b5_off + 4]
+        if (r, g, b) != (0, 0, 0) or raw[b5_off + 5] != 0:
+            rec["color"] = "%02X%02X%02X" % (r, g, b)
+        d = _u16(raw, b5_off + 6)
+        if 100 <= d <= 300:
+            rec["diameter"] = d / 100.0
+
+        # Block 6: Nozzle min (0:2), Nozzle max (2:4), Bed min (4:6), Bed max (6:8)
+        b6_off = b4_off + 32
+        tmin = _u16(raw, b6_off)
+        tmax = _u16(raw, b6_off + 2)
+        bmin = _u16(raw, b6_off + 4)
+        bmax = _u16(raw, b6_off + 6)
+        if 150 <= tmin <= 350 and 150 <= tmax <= 350 and tmin <= tmax:
+            rec["temp_min"] = tmin
+            rec["temp_max"] = tmax
+        if 20 <= bmin <= 130 and 20 <= bmax <= 130 and bmin <= bmax:
+            rec["bed_min"] = bmin
+            rec["bed_max"] = bmax
+
+    # 3. Fallback to ASCII keyword matching if still unknown
+    if not rec["material"]:
+        low = text.lower()
+        if "pla matte" in low: rec["material"] = "PLA Matte"
+        elif "pla basic" in low: rec["material"] = "PLA Basic"
+        elif "pla silk" in low: rec["material"] = "PLA Silk"
+        elif "pla tough" in low: rec["material"] = "PLA Tough"
+        elif "pla-cf" in low: rec["material"] = "PLA-CF"
+        elif "pla" in low: rec["material"] = "PLA"
+        elif "petg-cf" in low: rec["material"] = "PETG-CF"
+        elif "petg" in low: rec["material"] = "PETG Basic"
+        elif "abs" in low: rec["material"] = "ABS"
+        elif "asa" in low: rec["material"] = "ASA"
+        elif "tpu" in low: rec["material"] = "TPU 95A"
+        elif "pc" in low: rec["material"] = "PC"
+        elif "pa-cf" in low or "pa6-cf" in low: rec["material"] = "PA6-CF"
+
+    return rec
+
+
+def _parse_prusament(img):
+    """Parse Prusament NFC tag payload."""
+    text = bytes(img).decode("latin-1", "replace")
+    rec = {
+        "brand": "Prusament",
+        "material": None,
+        "color": None,
+        "temp_min": None,
+        "temp_max": None,
+        "bed_min": None,
+        "bed_max": None,
+        "diameter": 1.75,
+        "total_g": 1000,
+    }
+    low = text.lower()
+    if "pc blend" in low:
+        rec["material"] = "PC Blend"
+        rec["temp_min"], rec["temp_max"], rec["bed_min"], rec["bed_max"] = 265, 285, 100, 115
+    elif "pvb" in low:
+        rec["material"] = "PVB"
+        rec["temp_min"], rec["temp_max"], rec["bed_min"], rec["bed_max"] = 205, 225, 65, 75
+    elif "petg" in low:
+        rec["material"] = "PETG"
+        rec["temp_min"], rec["temp_max"], rec["bed_min"], rec["bed_max"] = 240, 260, 80, 90
+    elif "asa" in low:
+        rec["material"] = "ASA"
+        rec["temp_min"], rec["temp_max"], rec["bed_min"], rec["bed_max"] = 255, 270, 105, 115
+    elif "pla" in low:
+        rec["material"] = "PLA"
+        rec["temp_min"], rec["temp_max"], rec["bed_min"], rec["bed_max"] = 205, 225, 50, 60
+
+    color_match = re.search(r"#?([0-9A-Fa-f]{6})\b", text)
+    if color_match:
+        rec["color"] = color_match.group(1).upper()
+    return rec
+
+
+# JSON keys in the wild across OpenSpool, FilaMan, Spoolman NFC, OpenPrintTag:
+_JSON_KEYS = {
+    "sku": ("sku", "SKU", "spool_id", "spoolId", "spool", "sm_id", "spoolman_id", "id"),
+    "brand": ("brand", "manufacturer", "vendor"),
+    "material": ("material", "type", "filament_type"),
+    "color": ("color", "color_hex", "colour", "hex"),
+    "temp_min": ("temp_min", "min_temp", "extruder_min", "print_temp_min"),
+    "temp_max": ("temp_max", "max_temp", "extruder_max", "print_temp_max"),
+    "bed_min": ("bed_min", "bed_temp_min"),
+    "bed_max": ("bed_max", "bed_temp_max"),
+    "diameter": ("diameter", "filament_diameter"),
+    "total_g": ("total_g", "weight", "total_weight", "spool_weight"),
+}
+
+
+def _first_json(img):
+    """Parse the first valid JSON object in a byte sequence."""
     text = bytes(img).decode("latin-1", "replace")
     start = text.find("{")
     while start >= 0:
@@ -168,42 +398,12 @@ def _first_json(img):
                     try:
                         return json.loads(text[start:i + 1])
                     except ValueError:
-                        break          # this "{" did not start a real object - try the next
+                        break
         start = text.find("{", start + 1)
     return None
 
 
-# The JSON families (OpenSpool, FilaMan's writer, OpenPrintTag) differ mainly in spelling.
-_JSON_KEYS = {
-    # Real FilaMan/OpenSpool tag, read off the machine 2026-09-01:
-    #   {"protocol":"openspool","version":"1.0","type":"PLA","color_hex":"4B2A17",
-    #    "brand":"Filaments.CA","min_temp":"200","max_temp":"220","spool_id":26,"sm_id":26}
-    # Both spool_id and sm_id carry the spool number, and both sit BEYOND the 144-byte bulk
-    # read - so a reader that stops at page 39 gets everything except the identity.
-    "sku": ("sku", "SKU", "spool_id", "spoolId", "spool", "sm_id"),
-    "brand": ("brand", "manufacturer", "vendor", "make"),
-    "material": ("type", "material", "filament_type", "material_type"),
-    "color": ("color_hex", "color", "colour", "hex", "color_hex_1"),
-    "temp_min": ("min_temp", "temp_min", "nozzle_min", "extruder_min"),
-    "temp_max": ("max_temp", "temp_max", "nozzle_max", "extruder_max"),
-    "bed_min": ("bed_min", "min_bed_temp", "bed_temp_min"),
-    "bed_max": ("bed_max", "max_bed_temp", "bed_temp_max"),
-    "diameter": ("diameter", "filament_diameter"),
-    "total_g": ("weight", "total_weight", "spool_weight", "net_weight"),
-}
-
-
 def _repair_json(img):
-    """Best-effort parse of a TRUNCATED JSON object.
-
-    Not a nicety - a structural necessity. The firmware reads pages 4..39 = 144 bytes, and a
-    real FilaMan/OpenSpool message is 177: the closing brace sits at ~byte 176, so the head can
-    be recovered PERFECTLY and still never contain a complete object. Measured on this machine -
-    every field up to "max_temp" is present in the head; the brace and the identity are not.
-
-    Truncates back to the last complete "key": value pair and closes the object. Fields that
-    were cut off mid-value are dropped, never guessed.
-    """
     text = bytes(img).decode("latin-1", "replace")
     start = text.find("{")
     while start >= 0:
@@ -251,12 +451,7 @@ def _parse_json_family(img):
 
 
 def parse(image):
-    """Raw tag bytes -> one normalised record, whatever wrote the tag.
-
-    Always returns a dict carrying `format`; every other key may be None. A partial record is
-    still useful: it renders the lane offline when the backend is unreachable, which is the whole
-    point of reading the tag rather than only trusting the backend.
-    """
+    """Raw tag bytes -> one normalised record, whatever wrote the tag."""
     img = bytes(image)
     fmt, why = identify(img)
     rec = {"format": fmt, "why": why, "sku": None, "brand": None, "material": None,
@@ -264,6 +459,25 @@ def parse(image):
            "bed_max": None, "diameter": None, "total_g": None}
     if fmt == "anycubic":
         rec.update(_parse_anycubic(img))
+    elif fmt == "creality":
+        rec.update(_parse_creality(img))
+    elif fmt == "bambu":
+        rec.update(_parse_bambu(img))
+    elif fmt == "prusament":
+        rec.update(_parse_prusament(img))
+    elif fmt in ("mifare-classic", "bambu-uid", "raw-uid"):
+        uid = "".join("%02X" % b for b in img[0:4])
+        rec.update({
+            "uid": uid,
+            "sku": uid,
+            "brand": "Generic",
+            "material": "Unknown",
+            "color": "808080",
+            "temp_min": None,
+            "temp_max": None,
+            "bed_min": None,
+            "bed_max": None,
+        })
     elif fmt in ("openspool", "filaman", "openprinttag", "ndef-json", "ndef", "json"):
         parsed = _parse_json_family(img)
         if parsed:
@@ -273,23 +487,113 @@ def parse(image):
     return rec
 
 
+def ensure_basic_metadata(rec):
+    """Guarantees basic renderable metadata (material, color, brand, temps) even for
+    unregistered, unconfirmed, or raw-UID spools missing from the database.
+
+    Ensures Scenario 3 ('unconfirmed / raw tag info') always provides an honest visual
+    representation preserving whatever pertinent info (brand, material, color, temps)
+    is present on the tag without inventing fake materials or colors.
+    """
+    out = dict(rec or {})
+    uid = normalise_uid(out.get("uid"))
+    brand = out.get("brand")
+    material = out.get("material")
+    color = out.get("color")
+    color_name = out.get("color_name")
+    sku = out.get("sku")
+
+    if not brand:
+        out["brand"] = "Generic"
+    if not material:
+        out["material"] = "Unknown"
+    if not color:
+        out["color"] = "808080"
+    if not color_name:
+        out["color_name"] = ""
+
+    # Name construction: prioritize real on-tag metadata; never mask known brand/material
+    if not out.get("name"):
+        has_real_brand = out["brand"] and out["brand"].lower() != "generic"
+        has_real_material = out["material"] and out["material"].lower() != "unknown"
+
+        if has_real_brand and has_real_material:
+            if color_name:
+                out["name"] = f"{out['brand']} {out['material']} ({color_name})"
+            elif sku and not str(sku).startswith("0x") and len(str(sku)) < 12 and str(sku) != uid:
+                out["name"] = f"{out['brand']} {out['material']} #{sku}"
+            else:
+                out["name"] = f"{out['brand']} {out['material']}"
+        elif has_real_material:
+            if color_name:
+                out["name"] = f"{out['material']} ({color_name})"
+            else:
+                out["name"] = f"{out['material']}"
+        elif has_real_brand:
+            out["name"] = f"{out['brand']} ({uid})" if uid else f"{out['brand']}"
+        else:
+            out["name"] = f"Unidentified Tag ({uid})" if uid else "Unidentified Tag"
+
+    return out
+
+
+def uid_matches(tag_uid, candidate_uid):
+    """Robust ISO 14443-3 Type A UID comparison.
+
+    Handles:
+      1. Exact match after normalization (strip punctuation/spaces, uppercase).
+      2. Cascade Level 1 truncation: An NTAG or MIFARE 7-byte tag returning its 4-byte
+         anticollision frame (starts with 0x88 Cascade Tag, e.g. 8804ABDD) matches
+         the full 7-byte UID (04ABDD4FC92A81) whose first 3 bytes (04ABDD) align.
+      3. Reverse comparison if either side carries the cascade tag or truncated bytes.
+    """
+    t = normalise_uid(tag_uid)
+    c = normalise_uid(candidate_uid)
+    if not t or not c:
+        return False
+    if t == c:
+        return True
+
+    # 8-char hex starting with 88 = Cascade Level 1 CT + 3 UID bytes (e.g. 88 04 AB DD)
+    if len(t) == 8 and t.startswith("88"):
+        prefix = t[2:]  # 6 hex chars = 3 bytes
+        if len(c) >= 6 and c.startswith(prefix):
+            return True
+    if len(c) == 8 and c.startswith("88"):
+        prefix = c[2:]
+        if len(t) >= 6 and t.startswith(prefix):
+            return True
+
+    # Truncated 4-byte read of 7-byte UID without 88 prefix
+    if len(t) == 8 and len(c) >= 14 and c.startswith(t):
+        return True
+    if len(c) == 8 and len(t) >= 14 and t.startswith(c):
+        return True
+
+    return False
+
+
 def spool_from_record(rec):
     """The spool number, if the tag carries it. Returns int or None.
 
     Accepts the SM<n> form Anycubic-layout tags use and a bare number, which is what a JSON tag
-    writes when the field is literally the spool id. Deliberately does NOT accept FM<n>: that is
-    a FilaMan ARTICLE number, not a spool - one lane carried FM1676 while its spool was 22, so
-    matching it would bind the wrong spool silently.
+    writes when the field is literally the spool id. Also accepts spool_id, spoolId, sm_id,
+    spoolman_id, id. Deliberately does NOT accept FM<n>: that is a FilaMan ARTICLE number,
+    not a spool - one lane carried FM1676 while its spool was 22, so matching it would bind the
+    wrong spool silently.
     """
-    sku = rec.get("sku")
-    if sku is None:
+    if not isinstance(rec, dict):
         return None
-    s = str(sku).strip()
-    m = SKU_RE.match(s)
-    if m:
-        return int(m.group(1))
-    if s.isdigit():
-        return int(s)
+    for key in ("sku", "SKU", "spool_id", "spoolId", "spool", "sm_id", "spoolman_id", "id"):
+        val = rec.get(key)
+        if val is None:
+            continue
+        s = str(val).strip()
+        m = SKU_RE.match(s)
+        if m:
+            return int(m.group(1))
+        if s.isdigit() and int(s) > 0:
+            return int(s)
     return None
 
 
@@ -302,54 +606,74 @@ def resolve(rec, spools=None):
 
     THREE SCENARIOS, ALL OF WHICH MUST WORK, FOR EVERY FORMAT:
 
-      1. SKU matched against the backend. The tag carries the spool number, and the backend
-         confirms that spool exists. Best case: authoritative data, and the number itself needed
-         no network to obtain.
-      2. UID matched against the backend. The tag carries no spool number - a stock Anycubic or
-         Bambu tag, say - so identity comes from the UID, checked against BOTH rfid_uid and the
-         previous_tag custom field. Either face of a two-sided spool must land on the same spool.
+      1. SKU / Spool ID matched against the backend. The tag carries the spool number (e.g. Anycubic
+         SM<n>, OpenSpool sm_id, Spoolman spool_id), and the backend confirms that spool exists.
+      2. UID matched against the backend. The tag carries no embedded spool number - a Bambu,
+         stock Anycubic, or raw NTAG sticker - so identity comes from the UID, checked against
+         rfid_uid, rfid_uid_2, previous_tag, tag, and spoolman_extra.nfc_spool_uuid.
       3. Neither, or no backend at all. The tag's own fields still render the lane: colour,
-         material, temperatures. A tag that identifies a spool the backend has never heard of is
-         the same case - the number is real, it just cannot be confirmed.
+         material, temperatures. An unconfirmed tag is rendered honestly as 'Unidentified Tag (<uid>)'.
 
-    A SKU that the backend does not recognise deliberately does NOT fall through to the UID: the
-    tag says which spool it is, and quietly binding a different one because a lookup missed would
-    be worse than saying so.
-
-    R6 - the UID is matched against EVERY spool (both rfid_uid and the previous_tag custom field)
-    and ALL distinct spool ids that match are collected. More than one distinct id means the UID
-    is shared across spools in the backend, and there is no honest way to pick: it refuses rather
-    than binding the first one it happened to see.
+    R6 - the UID is matched against EVERY spool and ALL distinct spool ids that match are collected.
+    More than one distinct id means the UID is shared across spools in the backend, and there is no
+    honest way to pick: it refuses rather than binding the first one it happened to see.
     """
+    res = None
     sid = spool_from_record(rec)
     if sid is not None:
         if spools is None:
-            return sid, "sku %r (backend unreachable - unconfirmed)" % rec.get("sku"), False
-        for s in spools:
-            if s.get("id") == sid:
-                return sid, "sku %r" % rec.get("sku"), True
-        return sid, "sku %r (no such spool in the backend)" % rec.get("sku"), False
+            res = (sid, "sku %r (backend unreachable - unconfirmed)" % (rec.get("sku") or sid), False)
+        else:
+            for s in spools:
+                if s.get("id") == sid:
+                    return sid, "sku %r" % (rec.get("sku") or sid), True
+            res = (sid, "sku %r (no such spool in the backend)" % (rec.get("sku") or sid), False)
 
-    uid = normalise_uid(rec.get("uid"))
-    if not uid:
-        return None, "no spool number and no uid on this tag", False
-    if spools is None:
-        return None, "uid %s (backend unreachable)" % uid, False
-    matches = {}                       # distinct spool id -> how it matched
-    for s in spools:
-        mid = s.get("id")
-        if mid is None:
-            continue
-        if normalise_uid(s.get("rfid_uid")) == uid:
-            matches.setdefault(mid, "rfid_uid %s" % uid)
-        elif normalise_uid((s.get("custom_fields") or {}).get("previous_tag")) == uid:
-            matches.setdefault(mid, "previous_tag %s" % uid)
-    ids = sorted(matches)
-    if len(ids) > 1:
-        return None, "uid %s ambiguous: spools %s - refusing to guess" % (uid, ids), False
-    if len(ids) == 1:
-        return ids[0], matches[ids[0]], True
-    return None, "uid %s not known to the backend" % uid, False
+    if res is None:
+        uid = normalise_uid(rec.get("uid"))
+        if not uid:
+            res = (None, "no spool number and no uid on this tag", False)
+        elif spools is None:
+            res = (None, "uid %s (backend unreachable)" % uid, False)
+        else:
+            matches = {}                       # distinct spool id -> how it matched
+            for s in spools:
+                mid = s.get("id")
+                if mid is None:
+                    continue
+
+                cand_rfid = s.get("rfid_uid")
+                cand_rfid2 = s.get("rfid_uid_2")
+                cf = s.get("custom_fields") or {}
+                cand_prev = cf.get("previous_tag")
+                cand_tag = cf.get("tag")
+                cand_nfc = (cf.get("spoolman_extra") or {}).get("nfc_spool_uuid")
+                cand_nfc_id = cf.get("nfc_id")
+
+                if cand_rfid and uid_matches(uid, cand_rfid):
+                    matches.setdefault(mid, "rfid_uid %s" % normalise_uid(cand_rfid))
+                elif cand_rfid2 and uid_matches(uid, cand_rfid2):
+                    matches.setdefault(mid, "rfid_uid_2 %s" % normalise_uid(cand_rfid2))
+                elif cand_prev and uid_matches(uid, cand_prev):
+                    matches.setdefault(mid, "previous_tag %s" % normalise_uid(cand_prev))
+                elif cand_tag and uid_matches(uid, cand_tag):
+                    matches.setdefault(mid, "custom_tag %s" % normalise_uid(cand_tag))
+                elif cand_nfc and uid_matches(uid, cand_nfc):
+                    matches.setdefault(mid, "nfc_spool_uuid %s" % normalise_uid(cand_nfc))
+                elif cand_nfc_id and uid_matches(uid, cand_nfc_id):
+                    matches.setdefault(mid, "nfc_id %s" % normalise_uid(cand_nfc_id))
+
+            ids = sorted(matches)
+            if len(ids) > 1:
+                res = (None, "uid %s ambiguous: spools %s - refusing to guess" % (uid, ids), False)
+            elif len(ids) == 1:
+                return ids[0], matches[ids[0]], True
+            else:
+                res = (None, "uid %s not known to the backend" % uid, False)
+
+    if isinstance(rec, dict):
+        rec.update(ensure_basic_metadata(rec))
+    return res
 
 
 def _ndef_tlv_length(img):
@@ -402,6 +726,8 @@ def image_is_intact(image):
     fmt, _why = identify(img)
     if fmt in ("openspool", "filaman", "openprinttag", "ndef-json", "ndef", "json"):
         return ndef_is_intact(img)
+    if fmt in ("bambu", "creality", "prusament"):
+        return len(img) >= 16 and any(img)
     return False
 
 
@@ -468,6 +794,86 @@ if __name__ == "__main__":
     # own cited XOR uses 0x93, and 0x39 would make the BCC 0x78, not the 0xD2 in the dump.)
     bambu0 = bytes([137, 147, 52, 252, 210, 8, 4, 0, 5, 225, 214, 83, 195, 200, 189, 144])
     check("uid.4byte", uid_from_image(bambu0, first_page=0), "899334FC")
+    # Mifare Classic block 0 parse directly yields basic metadata for unconfirmed spools
+    brec = parse(bambu0)
+    check("mifare.format", brec["format"], "mifare-classic")
+    check("mifare.material", brec["material"], "Unknown")
+    check("mifare.brand", brec["brand"], "Generic")
+    check("mifare.color", brec["color"], "808080")
+    meta_checked = ensure_basic_metadata({"sku": None, "format": "unknown"})
+    check("ensure.meta.brand", meta_checked["brand"], "Generic")
+    check("ensure.meta.material", meta_checked["material"], "Unknown")
+
+    # Creality CFS tag format
+    creality_payload = b"CR-PLA:#FFFFFF:210:60:batch123"
+    crec = parse(creality_payload)
+    check("creality.format", crec["format"], "creality")
+    check("creality.brand", crec["brand"], "Creality")
+    check("creality.material", crec["material"], "PLA")
+    check("creality.color", crec["color"], "FFFFFF")
+    creality_meta = ensure_basic_metadata(crec)
+    check("creality.meta.name", creality_meta["name"], "Creality PLA")
+
+    # Bambu Lab tag tests
+    # 1. Bambu HKDF-SHA256 key derivation test
+    b_uid = bytes([0x89, 0x93, 0x34, 0xFC])
+    ka0, kb0 = bambu_kdf(b_uid, sector=0)
+    check("bambu.kdf.ka0", ka0.hex(), "a116197896d7")
+    check("bambu.kdf.kb0", kb0.hex(), "fbd6ae80f204")
+
+    # 2. Bambu Lab catalog lookup from tray_info_idx (e.g. GFG00 -> PETG Basic)
+    bambu_tray = b"GFA00" + b"\x00" * 27
+    bambu_rec = parse(bambu_tray)
+    check("bambu.catalog.format", bambu_rec["format"], "bambu")
+    check("bambu.catalog.brand", bambu_rec["brand"], "Bambu Lab")
+    check("bambu.catalog.material", bambu_rec["material"], "PLA Basic")
+    check("bambu.catalog.temp_min", bambu_rec["temp_min"], 190)
+    check("bambu.catalog.temp_max", bambu_rec["temp_max"], 230)
+    bambu_meta = ensure_basic_metadata(bambu_rec)
+    check("bambu.meta.name", bambu_meta["name"], "Bambu Lab PLA Basic")
+
+    # 3. Bambu Lab full MIFARE Sector 0 + Sector 1 mock image
+    bambu_img = bytearray(112)
+    bambu_img[0:4] = b_uid
+    bambu_img[4] = 0xD2 # BCC
+    bambu_img[16:21] = b"GFA01" # Block 1: tray_info_idx PLA Matte
+    bambu_img[64:73] = b"PLA Matte" # Block 4: detailed material string
+    # Block 5: weight 1000g (0xE803), color RGBA FF6A00FF (Orange), diameter 1.75 (175 = 0xAF00)
+    bambu_img[80:82] = struct.pack("<H", 1000)
+    bambu_img[82:86] = bytes([0xFF, 0x6A, 0x00, 0xFF])
+    bambu_img[86:88] = struct.pack("<H", 175)
+    # Block 6: Nozzle 190/230, Bed 45/60
+    bambu_img[96:98] = struct.pack("<H", 190)
+    bambu_img[98:100] = struct.pack("<H", 230)
+    bambu_img[100:102] = struct.pack("<H", 45)
+    bambu_img[102:104] = struct.pack("<H", 60)
+
+    bambu_full_rec = parse(bytes(bambu_img))
+    check("bambu.full.format", bambu_full_rec["format"], "bambu")
+    check("bambu.full.brand", bambu_full_rec["brand"], "Bambu Lab")
+    check("bambu.full.material", bambu_full_rec["material"], "PLA Matte")
+    check("bambu.full.color", bambu_full_rec["color"], "FF6A00")
+    check("bambu.full.diameter", bambu_full_rec["diameter"], 1.75)
+    check("bambu.full.total_g", bambu_full_rec["total_g"], 1000)
+    check("bambu.full.temp_min", bambu_full_rec["temp_min"], 190)
+    check("bambu.full.temp_max", bambu_full_rec["temp_max"], 230)
+    bambu_full_meta = ensure_basic_metadata(bambu_full_rec)
+    check("bambu.full.meta.name", bambu_full_meta["name"], "Bambu Lab PLA Matte")
+
+    # 4. Prusament RFID tag format
+    prusa_payload = b"Prusament PETG #FF7A00 250C"
+    prec = parse(prusa_payload)
+    check("prusament.format", prec["format"], "prusament")
+    check("prusament.brand", prec["brand"], "Prusament")
+    check("prusament.material", prec["material"], "PETG")
+    check("prusament.color", prec["color"], "FF7A00")
+    prusa_meta = ensure_basic_metadata(prec)
+    check("prusament.meta.name", prusa_meta["name"], "Prusament PETG")
+
+    # Cascade Level 1 UID prefix matching (e.g. 8804ABDD against 04:AB:DD:4F:C9:2A:81)
+    check("cascade1.match", uid_matches("8804ABDD", "04:AB:DD:4F:C9:2A:81"), True)
+    check("cascade1.mismatch", uid_matches("8804ABDD", "04:FF:DD:4F:C9:2A:81"), False)
+
     # 7-byte NTAG cascade still works (UID 04A27C70C52A81, BCC0 = 0x88^04^A2^7C = 0x52)
     ntag = bytes([0x04, 0xA2, 0x7C, 0x52, 0x70, 0xC5, 0x2A, 0x81])
     check("uid.7byte", uid_from_image(ntag, first_page=0), "04A27C70C52A81")
