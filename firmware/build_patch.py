@@ -54,8 +54,8 @@ SYMS = {
     "extract_resume": 0x0800FE3A, # rawtag_extract_stub Anycubic/failure resume
     "scan_exit": 0x0800FE98,      # background scan success exit (bypasses Anycubic parse)
 }
-VERSION_STRING = b"V1.1.46O\x00"  # Native on-chip multi-format RFID decoder (OpenSpool, FilaMan, Prusament, Creality, Bambu).
-                               # Trailing 'O' ensures mUlt1ACE auto-detects open firmware build.
+VERSION_STRING = b"V1.1.47O\x00"  # Native on-chip multi-format RFID decoder + dual-grab unlock.
+                               # Trailing 'O' ensures multiACE auto-detects open firmware build.
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -105,7 +105,7 @@ def crc16_kermit(data):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", required=True, help="stock ACE2 V1.1.31 .bin (you supply this)")
-    ap.add_argument("--out", default="ACE2-Open-V1.1.46.bin")
+    ap.add_argument("--out", default="ACE2-Open-V1.1.47O.bin")
     ap.add_argument("--tmp", default=".build")
     ap.add_argument("--force", action="store_true", help="proceed even if the base image is unrecognised")
     args = ap.parse_args()
@@ -212,6 +212,17 @@ def main():
             sys.exit("extend-read poke 0x%08X: expected 0x%02X found 0x%02X" % (addr, want, body[o]))
         body[o] = new
 
+    # Dual-grab unlock in sub_800F698 (NOP sibling busy check and RFID busy check):
+    # 0x0800F6F8: bpl.n 0x800f6c4 (e4 d5) -> nop (00 bf)
+    # 0x0800F724: beq.n 0x800f6c4 (ce d0) -> nop (00 bf)
+    for addr, want, new in ((0x0800F6F8, bytes([0xE4, 0xD5]), bytes([0x00, 0xBF])),
+                            (0x0800F724, bytes([0xCE, 0xD0]), bytes([0x00, 0xBF]))):
+        o = addr - BASE_ADDR
+        if bytes(body[o:o + len(want)]) != want:
+            sys.exit("dual-grab unlock poke 0x%08X: expected %s found %s"
+                     % (addr, want.hex(), bytes(body[o:o + len(want)]).hex()))
+        body[o:o + len(new)] = new
+
     o = HOOK_PAGEREAD - BASE_ADDR     # movw r1,#0x704 (40 f2 04 71)
     if bytes(body[o:o + 4]) != bytes([0x40, 0xF2, 0x04, 0x71]):
         sys.exit("page-read gate hook site does not match the expected instructions")
@@ -274,6 +285,8 @@ def main():
         {"file_offset": 0x0800E216 - BASE_ADDR, "addr": "0x0800E216", "bytes_hex": "38"},
         {"file_offset": 0x0800E21C - BASE_ADDR, "addr": "0x0800E21C", "bytes_hex": "04"},
         {"file_offset": 0x0800E220 - BASE_ADDR, "addr": "0x0800E220", "bytes_hex": "ac"},
+        {"file_offset": 0x0800F6F8 - BASE_ADDR, "addr": "0x0800F6F8", "bytes_hex": "00bf"},
+        {"file_offset": 0x0800F724 - BASE_ADDR, "addr": "0x0800F724", "bytes_hex": "00bf"},
         {"file_offset": i + 5, "addr": "0x%08X" % (BASE_ADDR + i + 5), "bytes_hex": VERSION_STRING[5:].hex()},
     ]
 
