@@ -64,10 +64,8 @@ SYMS = {
     "scan_exit": 0x0800FE98,       # background scan success exit (bypasses Anycubic positional parse)
     "cmd68_resume": 0x0800E8A6,   # rawtag_cmd68_stub resumes here
 }
-VERSION_STRING = b"V1.1.44"   # + autonomous Bambu UID capture on background scan path.
+VERSION_STRING = b"V1.1.45"   # + native on-chip multi-format RFID decoder (OpenSpool, FilaMan, Prusament, Creality, Bambu).
                              # Same length as V1.1.31 so the field layout is unchanged.
-                              # O = two-hook; W = shipped 2026-08-28; X adds rawtag; Y = cache;
-                              # Z adds the sm_id extraction+injection at HOOK_EXTRACT.
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -86,16 +84,19 @@ def thumb_bw(src, dst):
                        0x9000 | (((~i1 & 1) ^ s) << 13) | (((~i2 & 1) ^ s) << 11) | (off & 0x7FF))
 
 
-def assemble(src, addr, tmp):
-    lds = "ENTRY(_start)\nSECTIONS {\n  . = 0x%08X;\n  .text : { *(.text) }\n" % addr
+def assemble(src, addr, tmp, extra_objs=None):
+    lds = "ENTRY(_start)\nSECTIONS {\n  . = 0x%08X;\n  .text : { *(.text*) *(.rodata*) }\n" % addr
     for k, v in SYMS.items():
         lds += "  %s = 0x%08X;\n" % (k, v)
     lds += "}\n"
     open(os.path.join(tmp, "l.ld"), "w").write(lds)
     subprocess.run(["arm-none-eabi-as", "-mthumb", "-mcpu=cortex-m3", src,
                     "-o", os.path.join(tmp, "s.o")], check=True)
-    subprocess.run(["arm-none-eabi-ld", "-T", os.path.join(tmp, "l.ld"),
-                    os.path.join(tmp, "s.o"), "-o", os.path.join(tmp, "s.elf"),
+    objs = [os.path.join(tmp, "s.o")]
+    if extra_objs:
+        objs.extend(extra_objs)
+    subprocess.run(["arm-none-eabi-ld", "-T", os.path.join(tmp, "l.ld")] +
+                    objs + ["-o", os.path.join(tmp, "s.elf"),
                     "--defsym", "_start=0"], check=True)
     subprocess.run(["arm-none-eabi-objcopy", "-O", "binary",
                     os.path.join(tmp, "s.elf"), os.path.join(tmp, "s.bin")], check=True)
@@ -150,8 +151,14 @@ def main():
     cache_stub = assemble(os.path.join(HERE, "rawtag_cache_stub.s"), cache_addr, args.tmp)
     body += cache_stub
 
+    decoder_c = os.path.join(HERE, "native_tag_decoder.c")
+    decoder_obj = os.path.join(args.tmp, "decoder.o")
+    subprocess.run(["arm-none-eabi-gcc", "-mthumb", "-mcpu=cortex-m3", "-Os",
+                    "-ffreestanding", "-fno-builtin", "-fno-tree-loop-distribute-patterns", "-nostdlib",
+                    "-c", decoder_c, "-o", decoder_obj], check=True)
+
     extract_addr = BASE_ADDR + len(body)
-    extract_stub = assemble(os.path.join(HERE, "rawtag_extract_stub.s"), extract_addr, args.tmp)
+    extract_stub = assemble(os.path.join(HERE, "rawtag_extract_stub.s"), extract_addr, args.tmp, extra_objs=[decoder_obj])
     body += extract_stub
 
     cmd68_addr = BASE_ADDR + len(body)
