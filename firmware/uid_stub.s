@@ -19,6 +19,15 @@
         .global uid_stub
         .thumb_func
 uid_stub:
+        push    {r4, lr}
+        mov     r0, r4              @ arg0: resp struct pointer
+        add.w   r1, sp, #25         @ arg1: UID buffer (was sp+17 before push {r4, lr} = +8)
+        bl      decode_cmd68_uid_tag
+        cmp     r0, #1
+        beq     .Luid_decoded
+
+        @ Tag not recognized as Bambu Lab -> fall back to raw UID hex
+        pop     {r4, lr}
         add.w   r1, sp, #17         @ UID bytes (7) written by the anticollision cascade
         add.w   r2, r4, #8          @ sku field
         movs    r3, #7
@@ -43,5 +52,10 @@ uid_stub:
         strb    r5, [r2]            @ NUL terminate (14 chars + NUL fits in sku[19])
         movw    r5, #0x0201         @ version sentinel: "this sku is a raw tag UID"
         str     r5, [r4, #4]        @ 32-bit, matching the handler's own store to this field
+        movs    r0, #0              @ code = SUCCESS
+        b.w     epilogue            @ 0x0800E904: str r0,[r4,#140]; movs r0,#1; pop
+
+.Luid_decoded:
+        pop     {r4, lr}
         movs    r0, #0              @ code = SUCCESS
         b.w     epilogue            @ 0x0800E904: str r0,[r4,#140]; movs r0,#1; pop

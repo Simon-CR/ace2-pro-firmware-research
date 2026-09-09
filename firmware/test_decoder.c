@@ -122,13 +122,32 @@ int main() {
     int res6 = decode_native_tag(slot, page_buf, 0); /* page read failed (0 bytes) */
     assert(res6 == 1);
     assert(slot[OFF_STATUS] == 2);
-    assert(*(uint16_t *)&slot[OFF_VERSION] == 0x0201);
+    assert(*(uint16_t *)&slot[OFF_VERSION] == 0x0102);
     assert(strcmp((char *)&slot[OFF_BRAND], "Bambu Lab") == 0);
     assert(strcmp((char *)&slot[OFF_SKU], "SM899334FC") == 0);
     assert(strcmp((char *)&slot[OFF_TYPE], "PLA Basic") == 0);
     printf("[PASS] Test 6: Bambu Lab MIFARE Classic verified (SKU=%s, Brand=%s, Material=%s)\n",
            &slot[OFF_SKU], &slot[OFF_BRAND], &slot[OFF_TYPE]);
 
-    printf("\n>>> ALL 6 TAG DECODER SUITES PASSED VERIFICATION <<<\n");
+    /* Test 7: CMD 68 UID fallback decoder */
+    uint8_t resp[144];
+    memset(resp, 0, sizeof(resp));
+    uint8_t uid[7] = {0x1E, 0xF5, 0xE2, 0x98, 0x91, 0x00, 0x00};
+    int res7 = decode_cmd68_uid_tag(resp, uid);
+    assert(res7 == 1);
+    assert(*(uint32_t *)(resp + 4) == 0x0102);
+    assert(strcmp((char *)(resp + 8), "SM1EF5E298") == 0);
+    assert(strcmp((char *)(resp + 28), "PLA Basic") == 0);
+    assert(*(uint32_t *)(resp + 96) == 190);
+    assert(*(uint32_t *)(resp + 100) == 230);
+    assert(*(uint32_t *)(resp + 116) == 45);
+    assert(*(uint32_t *)(resp + 120) == 60);
+    assert(*(uint32_t *)(resp + 124) == 175);
+    assert(*(uint32_t *)(resp + 136) == 1000);
+    assert(*(uint32_t *)(resp + 140) == 0);
+    printf("[PASS] Test 7: CMD 68 Bambu UID decoder verified (SKU=%s, Type=%s, Version=0x%04X)\n",
+           (char *)(resp + 8), (char *)(resp + 28), *(uint32_t *)(resp + 4));
+
+    printf("\n>>> ALL 7 TAG DECODER SUITES PASSED VERIFICATION <<<\n");
     return 0;
 }

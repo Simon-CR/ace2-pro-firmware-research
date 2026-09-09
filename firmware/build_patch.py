@@ -54,7 +54,7 @@ SYMS = {
     "extract_resume": 0x0800FE3A, # rawtag_extract_stub Anycubic/failure resume
     "scan_exit": 0x0800FE98,      # background scan success exit (bypasses Anycubic parse)
 }
-VERSION_STRING = b"V1.1.47O\x00"  # Native on-chip multi-format RFID decoder + dual-grab unlock.
+VERSION_STRING = b"V1.1.48O\x00"  # Native on-chip multi-format RFID decoder + dual-grab unlock + Bambu CMD68.
                                # Trailing 'O' ensures multiACE auto-detects open firmware build.
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -105,7 +105,7 @@ def crc16_kermit(data):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", required=True, help="stock ACE2 V1.1.31 .bin (you supply this)")
-    ap.add_argument("--out", default="ACE2-Open-V1.1.47O.bin")
+    ap.add_argument("--out", default="ACE2-Open-V1.1.48O.bin")
     ap.add_argument("--tmp", default=".build")
     ap.add_argument("--force", action="store_true", help="proceed even if the base image is unrecognised")
     args = ap.parse_args()
@@ -150,7 +150,7 @@ def main():
         parts = line.split()
         if len(parts) == 3:
             addr_str, typ, sym = parts
-            if sym in ("decode_native_tag", "decode_cmd68_tag"):
+            if sym in ("decode_native_tag", "decode_cmd68_tag", "decode_cmd68_uid_tag"):
                 SYMS[sym] = int(addr_str, 16)
 
     uid_addr = BASE_ADDR + len(body)

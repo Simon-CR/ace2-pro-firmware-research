@@ -271,7 +271,7 @@ static int decode_bambu_classic(decoded_tag_t *tag, const uint8_t *uid) {
     tag->bed_max = 60;
     tag->diameter = 175;
     tag->total_grams = 1000;
-    tag->version = 0x0201;
+    tag->version = 0x0102;
 
     return 1;
 }
@@ -635,4 +635,48 @@ int decode_cmd68_tag(uint8_t *resp, const uint8_t *page_buf, int bytes_read) {
     *(uint32_t *)(resp + 140) = 0;
 
     return 1;
+}
+
+/*
+ * MAIN ENTRY POINT 3: Live CMD 68 UID fallback decoder
+ * Hooked from uid_stub.s at 0x0800E7A8 when page read fails (MIFARE Classic).
+ * Populates FilamentInfoResponse struct at r4 if recognized as Bambu Lab.
+ */
+int decode_cmd68_uid_tag(uint8_t *resp, const uint8_t *uid) {
+    decoded_tag_t tag;
+    memset(&tag, 0, sizeof(tag));
+
+    if (decode_bambu_classic(&tag, uid)) {
+        *(uint32_t *)(resp + 4) = (uint32_t)tag.version;
+        str_copy((char *)(resp + 8), tag.sku, 20);
+        resp[27] = '\0';
+        str_copy((char *)(resp + 28), tag.type, 20);
+        resp[47] = '\0';
+
+        if (tag.color != 0) {
+            *(uint32_t *)(resp + 48) = 1;
+            *(uint32_t *)(resp + 52) = tag.color;
+        } else {
+            *(uint32_t *)(resp + 48) = 0;
+        }
+
+        resp[92] = 1;
+        *(uint32_t *)(resp + 96) = tag.temp_min;
+        *(uint32_t *)(resp + 100) = tag.temp_max;
+        *(uint32_t *)(resp + 104) = 0;
+        *(uint32_t *)(resp + 108) = 0;
+
+        resp[112] = 1;
+        *(uint32_t *)(resp + 116) = tag.bed_min;
+        *(uint32_t *)(resp + 120) = tag.bed_max;
+
+        *(uint32_t *)(resp + 124) = tag.diameter;
+        *(uint32_t *)(resp + 128) = 0;
+        *(uint32_t *)(resp + 132) = 0;
+        *(uint32_t *)(resp + 136) = tag.total_grams;
+        *(uint32_t *)(resp + 140) = 0;
+
+        return 1;
+    }
+    return 0;
 }
