@@ -175,3 +175,68 @@ To port this setup to the Snapmaker U1 or another Klipper printer:
      ```
 4. **Enable Moonraker FilaMan / Spool Resolution**:
    - Ensure Moonraker includes the updated `filaman.py` component for automatic gate mapping and temperature feeding.
+
+---
+
+## 6. Dual-Topology Deployment Model: Snapmaker U1 vs. Voron Trident CM4
+
+The ACE 2 Pro Klipper integration is architected around a dual-topology deployment model, accommodating both resource-constrained embedded printer controllers and high-performance all-in-one appliance hosts.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ SCENARIO 1: Embedded Host Offloading (e.g. Snapmaker U1)                    │
+│                                                                             │
+│  ┌─────────────────────────┐             ┌───────────────────────────────┐  │
+│  │   Snapmaker U1 Host     │  HTTP/WS    │   External Host / Server      │  │
+│  │  - Minimal Linux OS     │◄───────────►│  - multiACE Daemon (port 7126)│  │
+│  │  - Klipper + Moonraker  │  MOONRAKER  │  - Web Visualizer UI          │  │
+│  │  - extras/ace driver    │  _URL       │  - Heavy RFID / Spoolman sync │  │
+│  └─────────────────────────┘             └───────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ SCENARIO 2: Self-Contained Appliance (e.g. Voron Trident 300 CM4)           │
+│                                                                             │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │   Raspberry Pi CM4 (8GB eMMC / Lite)                                  │  │
+│  │  - Klipper Host (klippy + extras/ace/ driver)                         │  │
+│  │  - Moonraker API Engine                                               │  │
+│  │  - Prism Touch Native (Qt 6.11 / QML appliance engine on EGLFS :0)    │  │
+│  │  - multiACE Daemon (port 7126, local loopback / LAN)                  │  │
+│  │  - Local Spoolman / FilaMan database sync                             │  │
+│  └───────────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 6.1 Deployment Topologies
+
+1. **Scenario 1: Embedded Host Offloading (Snapmaker U1)**:
+   - Target environment: Printers with embedded Linux SOCs, restricted RAM/CPU budgets, or vendor-locked host environments where running background Python services or web servers is undesirable.
+   - Decoupled delegation: The printer host runs only Klipper (`klippy`), Moonraker, and the minimal `extras/ace` driver layer communicating over serial/UART to the ACE 2 Pro MCU.
+   - Remote daemon: The multiACE daemon runs on an external server, workstation, or container, targeting the printer via `MOONRAKER_URL=http://<printer_ip>:7125`. Kinematics, Web UI rendering, and external integrations are completely offloaded from the embedded controller.
+
+2. **Scenario 2: Self-Contained Appliance (Voron Trident 300 CM4)**:
+   - Target environment: Full-featured host controllers (e.g. Raspberry Pi CM4 with 8GB RAM) operating as a stand-alone 3D printing appliance.
+   - All-in-one stack: Klipper, Moonraker, the multiACE daemon (port 7126), and Prism Touch Native (Qt 6.11 / QML running directly on Linux framebuffer via EGLFS on `:0`) execute on the same host.
+   - Zero-latency IPC: Fast inter-process communication occurs over local UNIX domain sockets or loopback HTTP/WebSocket connections (`127.0.0.1:7125`), ensuring deterministic state transitions and responsive touch interaction.
+
+### 6.2 Generic Klipper Single-Extruder Adaptations
+
+To ensure robust operation across diverse Klipper kinematics and single-extruder setups, several core adaptations have been implemented:
+
+1. **Startup Reactor Pause Bugfix (Callback Deferral)**:
+   - *Problem*: Synchronous invocation of `self.gcode.run_script_from_command()` inside `write_variables()` or `_open_ace()` during Klipper initialization or serial connect attempts to pause the reactor when it is not in active dispatch. This raises `ReactorError: Internal error - reactor pause disabled` in Klipper's `assert_no_pause()` check and leaks greenlet timer waiters.
+   - *Fix*: Wrap initialization G-code dispatches inside `self.printer.get_reactor().register_callback(...)`. This defers macro and variable initialization until the event reactor loop enters active dispatch, eliminating startup crashes across all Klipper distributions.
+
+2. **Dynamic Configuration Path Resolution (`_resolve_cfg_path`)**:
+   - Instead of hardcoding paths to `~/printer_data/config` or `/home/pi/klipper_config`, multiACE uses dynamic path resolution (`_resolve_cfg_path()`).
+   - Dynamically discovers configuration directories across Snapmaker U1, MainsailOS, FluiddPi, and BTT CB1 environments, preventing 404 file errors when loading macro files or writing runtime persistent variables.
+
+3. **Dedicated Slot Park (`ACE_LANE_PARK`) and Eject (`ACE_LANE_EJECT`) Controls**:
+   - Single-extruder multi-material operations require distinct separation between unparking for immediate toolchange vs. ejecting for filament replacement:
+     - `ACE_LANE_PARK T={slot}`: Retracts the active strand to the cold park datum (at `toolhead_postgear` / Bowden entry), retaining the strand staged in the Bowden tube for instant reload.
+     - `ACE_LANE_EJECT T={slot}`: Fully extracts the strand from the toolhead and Bowden path, rewinding it completely onto the spool cradle in the ACE unit so the operator can safely remove or replace the spool.
+
+4. **Zero-Load Web UI & Rotisserie Enhancements**:
+   - The multiACE web UI provides complete management for empty/unloaded slots, manual feed/rollback buttons, and slot configuration cards even when no filament is present at the toolhead.
+   - Includes first-class controls for spool drying rotation (`ROTISSERIE_SWEEP` and `ROTISSERIE_SPIN`), allowing filament drying without false jam alerts or unintended advancement into the multi-material hub.
