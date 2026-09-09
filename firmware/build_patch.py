@@ -13,10 +13,11 @@ Requires arm-none-eabi-as / ld / objcopy. If you have no toolchain, use apply_pa
 pre-assembled firmware/patch.json instead.
 
 Usage:
-    python3 build_patch.py --base ACE2_V1.1.31_20260306.bin --out ACE2-Open.bin
+    python3 build_patch.py --base ACE2_V1.1.31_20260306.bin --out ACE2-Open-V1.1.46.bin
 """
 import argparse
 import hashlib
+import json
 import os
 import struct
 import subprocess
@@ -29,21 +30,11 @@ MAGIC = bytes([0x61, 0xA5, 0x63, 0x5A, 0x65, 0xA5, 0x32, 0x5A])
 
 HOOK_UID = 0x0800E836        # movs r0,#6 ; b.n    -- the READFAILED exit
 HOOK_RC522 = 0x0800E7DA      # movs r0,#1 ; b.n    -- the index >= 4 rejection (dead path)
-HOOK_RAWTAG = 0x0800E842     # add.w lr,sp,#140    -- cmd 68's positional parse (host-initiated)
+HOOK_RAWTAG = 0x0800E842     # add.w lr,sp,#140    -- cmd 68's live identification hook
 HOOK_RAWCACHE = 0x0800FE3C   # add.w lr,r5,#136    -- the BACKGROUND reader's positional parse.
-                             # The only path that ever reads a tag on this machine: cmd 68
-                             # answers code 3 even on lanes the ACE decodes fine by itself.
-HOOK_PAGEREAD = 0x0800E228   # movw r1,#0x704 -- the page-read copy/return epilogue. BOTH
-                             # extend-read failure branches are poked to land here, so gating
-                             # it on r7 is what stops a failed read from returning 144 with the
-                             # PREVIOUS tag still staged in the shared buffer.
-HOOK_EXTRACT = 0x0800FE36    # mov r6,r0 ; cmp r0,#140  -- just after the background page read.
-                             # r5 == commit's memcpy source, so writing "SM<n>" to r5+28 rides
-                             # the native pipeline to cmd-13's SKU. Reads the tag tail (past the
-                             # 144-byte window) for the OpenSpool sm_id. Coexists with RAWCACHE
-                             # (FE3C): non-overlapping 4-byte sites, FE3A left intact between them.
-HOOK_CMD68 = 0x0800E8A2      # add.w r0,r8,#88 -- cmd-68 response, AFTER the native sku/version
-                             # writes (E842 gets clobbered); sm_id inject on the live-read path.
+HOOK_PAGEREAD = 0x0800E228   # movw r1,#0x704 -- the page-read copy/return epilogue.
+HOOK_EXTRACT = 0x0800FE36    # mov r6,r0 ; cmp r0,#140  -- background worker decode hook.
+
 EPILOGUE = 0x0800E904
 SYMS = {
     "epilogue": EPILOGUE,
@@ -56,16 +47,15 @@ SYMS = {
     "rfid_pageread": 0x0800E18C,
     "delay_ms": 0x08013C70,
     "memcpy": 0x08008AA8,
-    "resume": 0x0800E846,     # the instruction after the one rawtag_stub displaces
-    "cache_resume": 0x0800FE40,  # likewise for rawtag_cache_stub
-    "pageread_resume": 0x0800E22C,   # mid-epilogue, after the displaced movw
-    "pageread_fail": 0x0800E23C,     # "mov r0, sl" -- the stock failed-read return
-    "extract_resume": 0x0800FE3A,  # rawtag_extract_stub rejoins the original bcc.n here
-    "scan_exit": 0x0800FE98,       # background scan success exit (bypasses Anycubic positional parse)
-    "cmd68_resume": 0x0800E8A6,   # rawtag_cmd68_stub resumes here
+    "resume": 0x0800E846,         # stock cmd 68 positional parse resume
+    "cache_resume": 0x0800FE40,   # rawtag_cache_stub resume
+    "pageread_resume": 0x0800E22C,# mid-epilogue, after the displaced movw
+    "pageread_fail": 0x0800E23C,  # "mov r0, sl" -- stock failed-read return
+    "extract_resume": 0x0800FE3A, # rawtag_extract_stub Anycubic/failure resume
+    "scan_exit": 0x0800FE98,      # background scan success exit (bypasses Anycubic parse)
 }
-VERSION_STRING = b"V1.1.45"   # + native on-chip multi-format RFID decoder (OpenSpool, FilaMan, Prusament, Creality, Bambu).
-                             # Same length as V1.1.31 so the field layout is unchanged.
+VERSION_STRING = b"V1.1.46O\x00"  # Native on-chip multi-format RFID decoder (OpenSpool, FilaMan, Prusament, Creality, Bambu).
+                               # Trailing 'O' ensures mUlt1ACE auto-detects open firmware build.
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -115,7 +105,7 @@ def crc16_kermit(data):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", required=True, help="stock ACE2 V1.1.31 .bin (you supply this)")
-    ap.add_argument("--out", default="ACE2-Open.bin")
+    ap.add_argument("--out", default="ACE2-Open-V1.1.46.bin")
     ap.add_argument("--tmp", default=".build")
     ap.add_argument("--force", action="store_true", help="proceed even if the base image is unrecognised")
     args = ap.parse_args()
@@ -135,6 +125,34 @@ def main():
     os.makedirs(args.tmp, exist_ok=True)
     body = img[:-8]
 
+    # 1. Compile native_tag_decoder.c standalone
+    decoder_c = os.path.join(HERE, "native_tag_decoder.c")
+    decoder_obj = os.path.join(args.tmp, "decoder.o")
+    subprocess.run(["arm-none-eabi-gcc", "-mthumb", "-mcpu=cortex-m3", "-Os",
+                    "-ffreestanding", "-fno-builtin", "-fno-tree-loop-distribute-patterns", "-nostdlib",
+                    "-c", decoder_c, "-o", decoder_obj], check=True)
+
+    # 2. Link decoder binary as standalone text section at decoder_addr
+    decoder_addr = BASE_ADDR + len(body)
+    dec_ld = ("ENTRY(decode_native_tag)\nSECTIONS {\n  . = 0x%08X;\n  .text : { *(.text*) *(.rodata*) }\n}\n" % decoder_addr)
+    open(os.path.join(args.tmp, "dec.ld"), "w").write(dec_ld)
+    subprocess.run(["arm-none-eabi-ld", "-T", os.path.join(args.tmp, "dec.ld"),
+                    decoder_obj, "-o", os.path.join(args.tmp, "dec.elf"),
+                    "--defsym", "_start=0"], check=True)
+    subprocess.run(["arm-none-eabi-objcopy", "-O", "binary",
+                    os.path.join(args.tmp, "dec.elf"), os.path.join(args.tmp, "dec.bin")], check=True)
+    decoder_bin = open(os.path.join(args.tmp, "dec.bin"), "rb").read()
+    body += decoder_bin
+
+    # 3. Read symbols from dec.elf and register into SYMS
+    nm_out = subprocess.check_output(["arm-none-eabi-nm", os.path.join(args.tmp, "dec.elf")]).decode()
+    for line in nm_out.strip().split("\n"):
+        parts = line.split()
+        if len(parts) == 3:
+            addr_str, typ, sym = parts
+            if sym in ("decode_native_tag", "decode_cmd68_tag"):
+                SYMS[sym] = int(addr_str, 16)
+
     uid_addr = BASE_ADDR + len(body)
     uid_stub = assemble(os.path.join(HERE, "uid_stub.s"), uid_addr, args.tmp)
     body += uid_stub
@@ -151,24 +169,15 @@ def main():
     cache_stub = assemble(os.path.join(HERE, "rawtag_cache_stub.s"), cache_addr, args.tmp)
     body += cache_stub
 
-    decoder_c = os.path.join(HERE, "native_tag_decoder.c")
-    decoder_obj = os.path.join(args.tmp, "decoder.o")
-    subprocess.run(["arm-none-eabi-gcc", "-mthumb", "-mcpu=cortex-m3", "-Os",
-                    "-ffreestanding", "-fno-builtin", "-fno-tree-loop-distribute-patterns", "-nostdlib",
-                    "-c", decoder_c, "-o", decoder_obj], check=True)
-
     extract_addr = BASE_ADDR + len(body)
-    extract_stub = assemble(os.path.join(HERE, "rawtag_extract_stub.s"), extract_addr, args.tmp, extra_objs=[decoder_obj])
+    extract_stub = assemble(os.path.join(HERE, "rawtag_extract_stub.s"), extract_addr, args.tmp)
     body += extract_stub
-
-    cmd68_addr = BASE_ADDR + len(body)
-    cmd68_stub = assemble(os.path.join(HERE, "rawtag_cmd68_stub.s"), cmd68_addr, args.tmp)
-    body += cmd68_stub
 
     pageread_addr = BASE_ADDR + len(body)
     pageread_stub = assemble(os.path.join(HERE, "pageread_gate_stub.s"), pageread_addr, args.tmp)
     body += pageread_stub
 
+    # Hook installations:
     o = HOOK_UID - BASE_ADDR
     if bytes(body[o:o + 4]) != bytes([0x06, 0x20, 0x64, 0xE0]):
         sys.exit("UID hook site does not match the expected instructions")
@@ -194,21 +203,7 @@ def main():
         sys.exit("sm_id extract hook site does not match the expected instructions")
     body[o:o + 4] = thumb_bw(HOOK_EXTRACT, extract_addr)
 
-    # Extend the stock page read 0x0800E18C to read pages 4-51 (12 blocks) into 0x20000704, so the
-    # extract hook can find sm_id in the tail with NO RC522 re-entry. A page-39 NAK (NTAG213) is
-    # tolerated by redirecting the two failure branches to the normal copy/return (0x800e228),
-    # which returns the hardcoded 144 (>=140, callers still pass). ALL THREE bytes together or
-    # none - the loop bound alone would turn every NTAG213 read into a hard failure. Addresses and
-    # bytes byte-verified against the stock .bin (argus, 2026-09-02).
-    #
-    # THE REDIRECT ALONE IS BLIND, WHICH IS WHY HOOK_PAGEREAD EXISTS. It tolerates a failure at
-    # ANY block, including the first, so a read that got nothing still returns 144 while the
-    # shared buffer holds the PREVIOUS tag - and the failing lane silently inherits its
-    # neighbour's identity and caches it until eject (measured 2026-09-03/04: T1 repeatedly
-    # returning T2's SM24, same firmware/spool/tag, varying only with scan order). The gate stub
-    # at 0x800e228 checks r7, which at a failure holds the bytes actually read, and sends a short
-    # read to the stock failure return instead. Keep the pokes AND the gate: the pokes route
-    # failures somewhere the gate can judge them.
+    # 3-byte extend read pokes:
     for addr, want, new in ((0x0800E220, 0x7C, 0xAC),   # cmp r7,#124 -> #172 : 12 iterations
                             (0x0800E216, 0x88, 0x38),   # cbnz r0 fail-target -> 0x800e228
                             (0x0800E21C, 0x0E, 0x04)):   # bne  fail-target -> 0x800e228
@@ -222,10 +217,9 @@ def main():
         sys.exit("page-read gate hook site does not match the expected instructions")
     body[o:o + 4] = thumb_bw(HOOK_PAGEREAD, pageread_addr)
 
-    o = HOOK_CMD68 - BASE_ADDR        # add.w r0,r8,#88 (08 f1 58 00)
-    if bytes(body[o:o + 4]) != bytes([0x08, 0xF1, 0x58, 0x00]):
-        sys.exit("cmd-68 inject hook site does not match the expected instructions")
-    body[o:o + 4] = thumb_bw(HOOK_CMD68, cmd68_addr)
+    # Note: HOOK_CMD68 (0x0800E8A2) is intentionally left stock (add.w r0, r8, #88).
+    # Open-format tags branch directly to epilogue (0x0800E904) from HOOK_RAWTAG.
+    # Native Anycubic tags resume stock parse and execute 0x0800E8A2 normally.
 
     i = body.find(b"V1.1.31\x00")
     if i < 0:
@@ -235,15 +229,81 @@ def main():
     out = bytes(body) + MAGIC
     open(args.out, "wb").write(out)
 
+    # Automatically generate/update firmware/patch.json for browser-based toolchain-free flashing
+    patch_path = os.path.join(HERE, "patch.json")
+    hooks_spec = [
+        {
+            "file_offset": HOOK_RC522 - BASE_ADDR,
+            "addr": "0x%08X" % HOOK_RC522,
+            "expect_hex": "012092e0",
+            "replace_hex": bytes(body[HOOK_RC522 - BASE_ADDR:HOOK_RC522 - BASE_ADDR + 4]).hex(),
+        },
+        {
+            "file_offset": HOOK_UID - BASE_ADDR,
+            "addr": "0x%08X" % HOOK_UID,
+            "expect_hex": "062064e0",
+            "replace_hex": bytes(body[HOOK_UID - BASE_ADDR:HOOK_UID - BASE_ADDR + 4]).hex(),
+        },
+        {
+            "file_offset": HOOK_RAWTAG - BASE_ADDR,
+            "addr": "0x%08X" % HOOK_RAWTAG,
+            "expect_hex": "0df18c0e",
+            "replace_hex": bytes(body[HOOK_RAWTAG - BASE_ADDR:HOOK_RAWTAG - BASE_ADDR + 4]).hex(),
+        },
+        {
+            "file_offset": HOOK_RAWCACHE - BASE_ADDR,
+            "addr": "0x%08X" % HOOK_RAWCACHE,
+            "expect_hex": "05f1880e",
+            "replace_hex": bytes(body[HOOK_RAWCACHE - BASE_ADDR:HOOK_RAWCACHE - BASE_ADDR + 4]).hex(),
+        },
+        {
+            "file_offset": HOOK_EXTRACT - BASE_ADDR,
+            "addr": "0x%08X" % HOOK_EXTRACT,
+            "expect_hex": "06468c28",
+            "replace_hex": bytes(body[HOOK_EXTRACT - BASE_ADDR:HOOK_EXTRACT - BASE_ADDR + 4]).hex(),
+        },
+        {
+            "file_offset": HOOK_PAGEREAD - BASE_ADDR,
+            "addr": "0x%08X" % HOOK_PAGEREAD,
+            "expect_hex": "40f20471",
+            "replace_hex": bytes(body[HOOK_PAGEREAD - BASE_ADDR:HOOK_PAGEREAD - BASE_ADDR + 4]).hex(),
+        },
+    ]
+
+    pokes_spec = [
+        {"file_offset": 0x0800E216 - BASE_ADDR, "addr": "0x0800E216", "bytes_hex": "38"},
+        {"file_offset": 0x0800E21C - BASE_ADDR, "addr": "0x0800E21C", "bytes_hex": "04"},
+        {"file_offset": 0x0800E220 - BASE_ADDR, "addr": "0x0800E220", "bytes_hex": "ac"},
+        {"file_offset": i + 5, "addr": "0x%08X" % (BASE_ADDR + i + 5), "bytes_hex": VERSION_STRING[5:].hex()},
+    ]
+
+    patch_spec = {
+        "name": "ACE2-Open",
+        "base_of": "Anycubic ACE 2 Pro V1.1.31",
+        "base_md5": BASE_MD5,
+        "base_size": BASE_SIZE,
+        "version_string": VERSION_STRING.rstrip(b"\x00").decode("ascii"),
+        "appended_hex": bytes(body[BASE_SIZE - 8:]).hex(),
+        "hooks": hooks_spec,
+        "pokes": pokes_spec,
+        "result_size": len(out),
+        "result_crc16": crc16_kermit(out),
+        "note": "Contains only code written for this project plus the offsets it is applied at. No Anycubic firmware is included."
+    }
+    with open(patch_path, "w", encoding="utf-8") as f:
+        json.dump(patch_spec, f, indent=1)
+
+    print("decoder     %4d bytes at 0x%08X" % (len(decoder_bin), decoder_addr))
     print("uid stub    %4d bytes at 0x%08X" % (len(uid_stub), uid_addr))
     print("rc522 stub  %4d bytes at 0x%08X" % (len(rc_stub), rc_addr))
     print("rawtag stub %4d bytes at 0x%08X" % (len(raw_stub), raw_addr))
     print("cache stub  %4d bytes at 0x%08X" % (len(cache_stub), cache_addr))
     print("extract stub%4d bytes at 0x%08X" % (len(extract_stub), extract_addr))
-    print("cmd68 stub  %4d bytes at 0x%08X" % (len(cmd68_stub), cmd68_addr))
+    print("pageread    %4d bytes at 0x%08X" % (len(pageread_stub), pageread_addr))
     print("image       %d bytes, crc16/kermit 0x%04X" % (len(out), crc16_kermit(out)))
     print("magic last 8 bytes: %s  %s" % (out[-8:].hex(), "OK" if out[-8:] == MAGIC else "WRONG"))
-    print("reports version: %s" % VERSION_STRING.decode())
+    print("reports version: %s" % VERSION_STRING.rstrip(b"\x00").decode("ascii"))
+    print("wrote %s" % patch_path)
     print("\nwrote", args.out)
 
 

@@ -14,19 +14,13 @@
  *   5. Creality CFS (Sector 1 / ASCII material presets & hex color)
  *   6. Bambu Lab (MIFARE Classic UID validation + catalog lookup)
  *
- * On successful identification, this module populates the slot record in SRAM:
- *   r5 + 22: status = 2 (RFID_STATE_IDENTIFIED)
- *   r5 + 26: version = 0x0101 (or 0x0201 for Bambu)
- *   r5 + 28: sku (char[20], null-terminated)
- *   r5 + 48: brand (char[20], null-terminated)
- *   r5 + 68: material / type (char[20], null-terminated)
- *   r5 + 88: color (uint32_t, packed (R<<24)|(G<<16)|(B<<8)|0xFF)
- *   r5 + 104: extruder_temp_min (uint16_t)
- *   r5 + 106: extruder_temp_max (uint16_t)
- *   r5 + 124: bed_temp_min (uint16_t)
- *   r5 + 126: bed_temp_max (uint16_t)
- *   r5 + 128: diameter (uint16_t, 175 = 1.75mm)
- *   r5 + 132: total_grams (uint32_t, 1000)
+ * Unified dual-path architecture:
+ *   - decode_native_tag(slot_record, page_buf, bytes_read):
+ *       Called from rawtag_extract_stub.s (0x0800FE36) on background spool rotation.
+ *       Populates slot_record in MCU SRAM.
+ *   - decode_cmd68_tag(resp, page_buf, bytes_read):
+ *       Called from rawtag_stub.s (0x0800E842) on live FILAMENT_IDENTIFY command.
+ *       Populates FilamentInfoResponse protobuf response struct at r4.
  */
 
 typedef unsigned char uint8_t;
@@ -38,7 +32,7 @@ typedef __UINTPTR_TYPE__ uintptr_t;
 typedef unsigned long uintptr_t;
 #endif
 
-/* Slot record offsets relative to r5 */
+/* Slot record offsets relative to r5 (background worker) */
 #define OFF_STATUS        22
 #define OFF_VERSION       26
 #define OFF_SKU           28
@@ -51,6 +45,21 @@ typedef unsigned long uintptr_t;
 #define OFF_BED_MAX       126
 #define OFF_DIAMETER      128
 #define OFF_TOTAL_G       132
+
+/* Unified decoded tag representation */
+typedef struct {
+    uint16_t version;
+    char sku[20];
+    char brand[20];
+    char type[20];
+    uint32_t color;  // packed ((R<<24)|(G<<16)|(B<<8)|0xFF)
+    uint16_t temp_min;
+    uint16_t temp_max;
+    uint16_t bed_min;
+    uint16_t bed_max;
+    uint16_t diameter;
+    uint32_t total_grams;
+} decoded_tag_t;
 
 /* Freestanding compiler runtime support */
 #if !defined(_STRING_H) && !defined(_STRING_H_) && !defined(__string_h)
@@ -228,19 +237,19 @@ static uint32_t scan_for_hex_color(const uint8_t *buf, int len) {
 /*
  * Decode Bambu Lab MIFARE Classic Tag
  */
-static int decode_bambu_classic(uint8_t *slot_record) {
-    uint8_t u0 = slot_record[3];
-    uint8_t u1 = slot_record[4];
-    uint8_t u2 = slot_record[5];
-    uint8_t u3 = slot_record[6];
-    uint8_t bcc = slot_record[7];
+static int decode_bambu_classic(decoded_tag_t *tag, const uint8_t *uid) {
+    uint8_t u0 = uid[0];
+    uint8_t u1 = uid[1];
+    uint8_t u2 = uid[2];
+    uint8_t u3 = uid[3];
+    uint8_t bcc = uid[4];
 
     if ((u0 | u1 | u2 | u3) == 0) return 0;
     if ((u0 ^ u1 ^ u2 ^ u3) != bcc) return 0;
 
-    str_copy((char *)&slot_record[OFF_BRAND], "Bambu Lab", 20);
+    str_copy(tag->brand, "Bambu Lab", 20);
 
-    char *sku = (char *)&slot_record[OFF_SKU];
+    char *sku = tag->sku;
     sku[0] = 'S';
     sku[1] = 'M';
     static const char hex_chars[] = "0123456789ABCDEF";
@@ -254,24 +263,23 @@ static int decode_bambu_classic(uint8_t *slot_record) {
     sku[9] = hex_chars[u3 & 0xF];
     sku[10] = '\0';
 
-    str_copy((char *)&slot_record[OFF_TYPE], "PLA Basic", 20);
-    *(uint32_t *)&slot_record[OFF_COLOR] = 0;
-    *(uint16_t *)&slot_record[OFF_TEMP_MIN] = 190;
-    *(uint16_t *)&slot_record[OFF_TEMP_MAX] = 230;
-    *(uint16_t *)&slot_record[OFF_BED_MIN] = 45;
-    *(uint16_t *)&slot_record[OFF_BED_MAX] = 60;
-    *(uint16_t *)&slot_record[OFF_DIAMETER] = 175;
-    *(uint32_t *)&slot_record[OFF_TOTAL_G] = 1000;
+    str_copy(tag->type, "PLA Basic", 20);
+    tag->color = 0;
+    tag->temp_min = 190;
+    tag->temp_max = 230;
+    tag->bed_min = 45;
+    tag->bed_max = 60;
+    tag->diameter = 175;
+    tag->total_grams = 1000;
+    tag->version = 0x0201;
 
-    *(uint16_t *)&slot_record[OFF_VERSION] = 0x0201;
-    slot_record[OFF_STATUS] = 2;
     return 1;
 }
 
 /*
  * Decode OpenSpool / Spoolman / NDEF JSON / FilaMan tag
  */
-static int decode_json_spool(uint8_t *slot_record, const uint8_t *buf, int len) {
+static int decode_json_spool(decoded_tag_t *tag, const uint8_t *buf, int len) {
     char sku_tmp[24] = {0};
     char brand_tmp[24] = {0};
     char type_tmp[24] = {0};
@@ -298,12 +306,12 @@ static int decode_json_spool(uint8_t *slot_record, const uint8_t *buf, int len) 
             formatted[0] = 'S';
             formatted[1] = 'M';
             str_copy(&formatted[2], sku_tmp, sizeof(formatted) - 2);
-            str_copy((char *)&slot_record[OFF_SKU], formatted, 20);
+            str_copy(tag->sku, formatted, 20);
         } else {
-            str_copy((char *)&slot_record[OFF_SKU], sku_tmp, 20);
+            str_copy(tag->sku, sku_tmp, 20);
         }
     } else {
-        str_copy((char *)&slot_record[OFF_SKU], "OPENSPOOL", 20);
+        str_copy(tag->sku, "OPENSPOOL", 20);
     }
 
     if (!json_extract_string(buf, len, "brand", brand_tmp, sizeof(brand_tmp))) {
@@ -312,12 +320,12 @@ static int decode_json_spool(uint8_t *slot_record, const uint8_t *buf, int len) 
         }
     }
     if (brand_tmp[0] != '\0') {
-        str_copy((char *)&slot_record[OFF_BRAND], brand_tmp, 20);
+        str_copy(tag->brand, brand_tmp, 20);
     } else {
         if (find_substr(buf, len, "filaman") >= 0) {
-            str_copy((char *)&slot_record[OFF_BRAND], "FilaMan", 20);
+            str_copy(tag->brand, "FilaMan", 20);
         } else {
-            str_copy((char *)&slot_record[OFF_BRAND], "OpenSpool", 20);
+            str_copy(tag->brand, "OpenSpool", 20);
         }
     }
 
@@ -327,9 +335,9 @@ static int decode_json_spool(uint8_t *slot_record, const uint8_t *buf, int len) 
         }
     }
     if (type_tmp[0] != '\0') {
-        str_copy((char *)&slot_record[OFF_TYPE], type_tmp, 20);
+        str_copy(tag->type, type_tmp, 20);
     } else {
-        str_copy((char *)&slot_record[OFF_TYPE], "PLA", 20);
+        str_copy(tag->type, "PLA", 20);
     }
 
     uint32_t packed_color = 0;
@@ -342,7 +350,7 @@ static int decode_json_spool(uint8_t *slot_record, const uint8_t *buf, int len) 
     if (packed_color == 0) {
         packed_color = scan_for_hex_color(buf, len);
     }
-    *(uint32_t *)&slot_record[OFF_COLOR] = packed_color;
+    tag->color = packed_color;
 
     if (!json_extract_uint16(buf, len, "temp_min", &tmin)) {
         if (!json_extract_uint16(buf, len, "min_temp", &tmin)) {
@@ -385,25 +393,24 @@ static int decode_json_spool(uint8_t *slot_record, const uint8_t *buf, int len) 
         }
     }
 
-    *(uint16_t *)&slot_record[OFF_TEMP_MIN] = tmin;
-    *(uint16_t *)&slot_record[OFF_TEMP_MAX] = tmax;
-    *(uint16_t *)&slot_record[OFF_BED_MIN] = bmin;
-    *(uint16_t *)&slot_record[OFF_BED_MAX] = bmax;
+    tag->temp_min = tmin;
+    tag->temp_max = tmax;
+    tag->bed_min = bmin;
+    tag->bed_max = bmax;
 
     json_extract_uint16(buf, len, "diameter", &diam);
-    *(uint16_t *)&slot_record[OFF_DIAMETER] = (diam > 100 && diam < 300) ? diam : 175;
-    *(uint32_t *)&slot_record[OFF_TOTAL_G] = 1000;
+    tag->diameter = (diam > 100 && diam < 300) ? diam : 175;
+    tag->total_grams = 1000;
+    tag->version = 0x0101;
 
-    *(uint16_t *)&slot_record[OFF_VERSION] = 0x0101;
-    slot_record[OFF_STATUS] = 2;
     return 1;
 }
 
 /*
  * Decode Prusament NFC Tag
  */
-static int decode_prusament(uint8_t *slot_record, const uint8_t *buf, int len) {
-    str_copy((char *)&slot_record[OFF_BRAND], "Prusament", 20);
+static int decode_prusament(decoded_tag_t *tag, const uint8_t *buf, int len) {
+    str_copy(tag->brand, "Prusament", 20);
 
     uint16_t tmin = 215, tmax = 230, bmin = 50, bmax = 60;
     const char *mat = "PLA";
@@ -420,31 +427,30 @@ static int decode_prusament(uint8_t *slot_record, const uint8_t *buf, int len) {
         mat = "PLA"; tmin = 205; tmax = 225; bmin = 50; bmax = 60;
     }
 
-    str_copy((char *)&slot_record[OFF_TYPE], mat, 20);
+    str_copy(tag->type, mat, 20);
 
     char sku_buf[20];
     sku_buf[0] = 'P'; sku_buf[1] = 'R'; sku_buf[2] = 'U'; sku_buf[3] = 'S'; sku_buf[4] = 'A'; sku_buf[5] = '-';
     str_copy(&sku_buf[6], mat, 14);
-    str_copy((char *)&slot_record[OFF_SKU], sku_buf, 20);
+    str_copy(tag->sku, sku_buf, 20);
 
-    *(uint32_t *)&slot_record[OFF_COLOR] = scan_for_hex_color(buf, len);
-    *(uint16_t *)&slot_record[OFF_TEMP_MIN] = tmin;
-    *(uint16_t *)&slot_record[OFF_TEMP_MAX] = tmax;
-    *(uint16_t *)&slot_record[OFF_BED_MIN] = bmin;
-    *(uint16_t *)&slot_record[OFF_BED_MAX] = bmax;
-    *(uint16_t *)&slot_record[OFF_DIAMETER] = 175;
-    *(uint32_t *)&slot_record[OFF_TOTAL_G] = 1000;
+    tag->color = scan_for_hex_color(buf, len);
+    tag->temp_min = tmin;
+    tag->temp_max = tmax;
+    tag->bed_min = bmin;
+    tag->bed_max = bmax;
+    tag->diameter = 175;
+    tag->total_grams = 1000;
+    tag->version = 0x0101;
 
-    *(uint16_t *)&slot_record[OFF_VERSION] = 0x0101;
-    slot_record[OFF_STATUS] = 2;
     return 1;
 }
 
 /*
  * Decode Creality CFS Tag
  */
-static int decode_creality(uint8_t *slot_record, const uint8_t *buf, int len) {
-    str_copy((char *)&slot_record[OFF_BRAND], "Creality", 20);
+static int decode_creality(decoded_tag_t *tag, const uint8_t *buf, int len) {
+    str_copy(tag->brand, "Creality", 20);
 
     uint16_t tmin = 200, tmax = 220, bmin = 50, bmax = 60;
     const char *mat = "PLA";
@@ -461,43 +467,38 @@ static int decode_creality(uint8_t *slot_record, const uint8_t *buf, int len) {
         mat = "PLA"; tmin = 190; tmax = 230; bmin = 45; bmax = 60;
     }
 
-    str_copy((char *)&slot_record[OFF_TYPE], mat, 20);
+    str_copy(tag->type, mat, 20);
 
     char sku_buf[20];
     sku_buf[0] = 'C'; sku_buf[1] = 'F'; sku_buf[2] = 'S'; sku_buf[3] = '-';
     str_copy(&sku_buf[4], mat, 16);
-    str_copy((char *)&slot_record[OFF_SKU], sku_buf, 20);
+    str_copy(tag->sku, sku_buf, 20);
 
-    *(uint32_t *)&slot_record[OFF_COLOR] = scan_for_hex_color(buf, len);
-    *(uint16_t *)&slot_record[OFF_TEMP_MIN] = tmin;
-    *(uint16_t *)&slot_record[OFF_TEMP_MAX] = tmax;
-    *(uint16_t *)&slot_record[OFF_BED_MIN] = bmin;
-    *(uint16_t *)&slot_record[OFF_BED_MAX] = bmax;
-    *(uint16_t *)&slot_record[OFF_DIAMETER] = 175;
-    *(uint32_t *)&slot_record[OFF_TOTAL_G] = 1000;
+    tag->color = scan_for_hex_color(buf, len);
+    tag->temp_min = tmin;
+    tag->temp_max = tmax;
+    tag->bed_min = bmin;
+    tag->bed_max = bmax;
+    tag->diameter = 175;
+    tag->total_grams = 1000;
+    tag->version = 0x0101;
 
-    *(uint16_t *)&slot_record[OFF_VERSION] = 0x0101;
-    slot_record[OFF_STATUS] = 2;
     return 1;
 }
 
 /*
- * MAIN ENTRY POINT: Called from assembly hook at 0x0800FE36.
+ * Core format detector & parser.
+ * Returns:
+ *   0: Anycubic native tag (Magic 123 / Version 101)
+ *   1: Foreign tag successfully decoded into `tag`
+ *  -1: Unrecognized tag or insufficient bytes
  */
-int decode_native_tag(uint8_t *slot_record, const uint8_t *page_buf, int bytes_read) {
-#if defined(__arm__) || defined(__thumb__)
-    if ((uintptr_t)slot_record >= 0x20001748) {
-        return -1;
-    }
-#endif
-
+static int parse_tag_to_struct(decoded_tag_t *tag, const uint8_t *page_buf, int bytes_read) {
     if (bytes_read < 140) {
-        if (decode_bambu_classic(slot_record)) {
-            return 1;
-        }
         return -1;
     }
 
+    /* Anycubic Native Check: Page 4 magic 7B 00 65 00 */
     if (page_buf[0] == 0x7B && page_buf[1] == 0x00 &&
         page_buf[2] == 0x65 && page_buf[3] == 0x00) {
         return 0;
@@ -507,7 +508,7 @@ int decode_native_tag(uint8_t *slot_record, const uint8_t *page_buf, int bytes_r
 
     if (find_substr(page_buf, len, "prusament") >= 0 ||
         find_substr(page_buf, len, "prusa research") >= 0) {
-        return decode_prusament(slot_record, page_buf, len);
+        return decode_prusament(tag, page_buf, len);
     }
 
     if (find_substr(page_buf, len, "creality") >= 0 ||
@@ -516,7 +517,7 @@ int decode_native_tag(uint8_t *slot_record, const uint8_t *page_buf, int bytes_r
         find_substr(page_buf, len, "cr-petg") >= 0 ||
         find_substr(page_buf, len, "cr-abs") >= 0 ||
         find_substr(page_buf, len, "cr-tpu") >= 0) {
-        return decode_creality(slot_record, page_buf, len);
+        return decode_creality(tag, page_buf, len);
     }
 
     if (find_substr(page_buf, len, "{") >= 0 ||
@@ -524,14 +525,114 @@ int decode_native_tag(uint8_t *slot_record, const uint8_t *page_buf, int bytes_r
         find_substr(page_buf, len, "openspool") >= 0 ||
         find_substr(page_buf, len, "filaman") >= 0 ||
         find_substr(page_buf, len, "openprinttag") >= 0) {
-        return decode_json_spool(slot_record, page_buf, len);
+        return decode_json_spool(tag, page_buf, len);
     }
 
     for (int i = 0; i < len; i++) {
         if (page_buf[i] == '{') {
-            return decode_json_spool(slot_record, page_buf, len);
+            return decode_json_spool(tag, page_buf, len);
         }
     }
 
     return -1;
+}
+
+/*
+ * MAIN ENTRY POINT 1: Background Spool-Rotation Worker
+ * Hooked at 0x0800FE36 via rawtag_extract_stub.s.
+ * Populates slot_record in MCU SRAM.
+ */
+int decode_native_tag(uint8_t *slot_record, const uint8_t *page_buf, int bytes_read) {
+#if defined(__arm__) || defined(__thumb__)
+    if ((uintptr_t)slot_record >= 0x20001748) {
+        return -1;
+    }
+#endif
+
+    decoded_tag_t tag;
+    memset(&tag, 0, sizeof(tag));
+
+    if (bytes_read < 140) {
+        if (decode_bambu_classic(&tag, &slot_record[3])) {
+            slot_record[OFF_STATUS] = 2;
+            *(uint16_t *)&slot_record[OFF_VERSION] = tag.version;
+            str_copy((char *)&slot_record[OFF_SKU], tag.sku, 20);
+            str_copy((char *)&slot_record[OFF_BRAND], tag.brand, 20);
+            str_copy((char *)&slot_record[OFF_TYPE], tag.type, 20);
+            *(uint32_t *)&slot_record[OFF_COLOR] = tag.color;
+            *(uint16_t *)&slot_record[OFF_TEMP_MIN] = tag.temp_min;
+            *(uint16_t *)&slot_record[OFF_TEMP_MAX] = tag.temp_max;
+            *(uint16_t *)&slot_record[OFF_BED_MIN] = tag.bed_min;
+            *(uint16_t *)&slot_record[OFF_BED_MAX] = tag.bed_max;
+            *(uint16_t *)&slot_record[OFF_DIAMETER] = tag.diameter;
+            *(uint32_t *)&slot_record[OFF_TOTAL_G] = tag.total_grams;
+            return 1;
+        }
+        return -1;
+    }
+
+    int res = parse_tag_to_struct(&tag, page_buf, bytes_read);
+    if (res != 1) {
+        return res;  // 0 = Anycubic, -1 = Unrecognized
+    }
+
+    slot_record[OFF_STATUS] = 2;
+    *(uint16_t *)&slot_record[OFF_VERSION] = tag.version;
+    str_copy((char *)&slot_record[OFF_SKU], tag.sku, 20);
+    str_copy((char *)&slot_record[OFF_BRAND], tag.brand, 20);
+    str_copy((char *)&slot_record[OFF_TYPE], tag.type, 20);
+    *(uint32_t *)&slot_record[OFF_COLOR] = tag.color;
+    *(uint16_t *)&slot_record[OFF_TEMP_MIN] = tag.temp_min;
+    *(uint16_t *)&slot_record[OFF_TEMP_MAX] = tag.temp_max;
+    *(uint16_t *)&slot_record[OFF_BED_MIN] = tag.bed_min;
+    *(uint16_t *)&slot_record[OFF_BED_MAX] = tag.bed_max;
+    *(uint16_t *)&slot_record[OFF_DIAMETER] = tag.diameter;
+    *(uint32_t *)&slot_record[OFF_TOTAL_G] = tag.total_grams;
+    return 1;
+}
+
+/*
+ * MAIN ENTRY POINT 2: Live FILAMENT_IDENTIFY Command 68
+ * Hooked at 0x0800E842 via rawtag_stub.s.
+ * Populates FilamentInfoResponse protobuf struct at r4.
+ */
+int decode_cmd68_tag(uint8_t *resp, const uint8_t *page_buf, int bytes_read) {
+    decoded_tag_t tag;
+    memset(&tag, 0, sizeof(tag));
+
+    int res = parse_tag_to_struct(&tag, page_buf, bytes_read);
+    if (res != 1) {
+        return res;  // 0 = Anycubic, -1 = Unrecognized
+    }
+
+    *(uint32_t *)(resp + 4) = (uint32_t)tag.version;
+    str_copy((char *)(resp + 8), tag.sku, 20);
+    resp[27] = '\0';
+    str_copy((char *)(resp + 28), tag.type, 20);
+    resp[47] = '\0';
+
+    if (tag.color != 0) {
+        *(uint32_t *)(resp + 48) = 1;
+        *(uint32_t *)(resp + 52) = tag.color;
+    } else {
+        *(uint32_t *)(resp + 48) = 0;
+    }
+
+    resp[92] = 1;
+    *(uint32_t *)(resp + 96) = tag.temp_min;
+    *(uint32_t *)(resp + 100) = tag.temp_max;
+    *(uint32_t *)(resp + 104) = 0;
+    *(uint32_t *)(resp + 108) = 0;
+
+    resp[112] = 1;
+    *(uint32_t *)(resp + 116) = tag.bed_min;
+    *(uint32_t *)(resp + 120) = tag.bed_max;
+
+    *(uint32_t *)(resp + 124) = tag.diameter;
+    *(uint32_t *)(resp + 128) = 0;
+    *(uint32_t *)(resp + 132) = 0;
+    *(uint32_t *)(resp + 136) = tag.total_grams;
+    *(uint32_t *)(resp + 140) = 0;
+
+    return 1;
 }
