@@ -24,9 +24,10 @@ TxControlReg, VersionReg = 0x14, 0x37
 PCD_TRANSCEIVE, PCD_AUTHENT = 0x0C, 0x0E
 
 
-def _post(script, timeout=180):
+def _post(script, timeout=30):
+    data = urllib.parse.urlencode({"script": script}).encode()
     urllib.request.urlopen(urllib.request.Request(
-        B + "/printer/gcode/script?script=" + urllib.parse.quote(script), method="POST"), timeout=timeout).read()
+        B + "/printer/gcode/script", data=data), timeout=timeout).read()
 
 
 def _get(path, timeout=25):
@@ -41,21 +42,28 @@ class Ace:
         return 0x80000000 | (self.reader << 24) | (op << 16) | ((a1 & 0x3F) << 8) | (a2 & 0xFF)
 
     def batch(self, ops, dwell=12):
+        pre = _get("/server/gcode_store?count=1")["gcode_store"]
+        baseline_time = pre[-1]["time"] if pre else 0.0
+
         script, n = "", 0
         for o in ops:
             script += "ACE_RAW_CMD T=0 CMD=FILAMENT_IDENTIFY INDEX=%d\nG4 P%d\n" % (self._idx(*o), dwell)
             n += 1
-        t = time.time()
         _post(script)
-        time.sleep(0.4 + 0.03 * n)
+        deadline = time.time() + max(4.0, 0.6 + 0.1 * n)
         out = []
-        for g in _get("/server/gcode_store?count=%d" % (n * 3 + 12))["gcode_store"]:
-            m = g["message"]
-            if g["time"] > t - 0.2 and "FILAMENT_IDENTIFY {'index': " in m and "->" in m and "'code': " in m:
-                idx = int(m.split("{'index': ")[1].split("}")[0])
-                if idx & 0x80000000:
-                    out.append(int(m.split("'code': ")[1].split(",")[0]))
-        return out
+        while time.time() < deadline:
+            time.sleep(0.08 + 0.015 * n)
+            out = []
+            for g in _get("/server/gcode_store?count=%d" % max(200, n * 4 + 60))["gcode_store"]:
+                m = g["message"]
+                if g["time"] > baseline_time and "FILAMENT_IDENTIFY {'index': " in m and "->" in m and "'code': " in m:
+                    idx = int(m.split("{'index': ")[1].split("}")[0])
+                    if idx & 0x80000000:
+                        out.append(int(m.split("'code': ")[1].split(",")[0]))
+            if len(out) >= n:
+                return out[:n]
+        return out[:n]
 
     def wake(self):
         _post("ACE_RAW_CMD T=%d CMD=FILAMENT_IDENTIFY INDEX=%d" % (self.slot, self.slot))
