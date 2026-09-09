@@ -33,7 +33,8 @@ rawtag_extract_stub:
         str     r0, [sp, #0]            @ save byte count
 
         @ Call C native_tag_decoder:
-        @ int decode_native_tag(uint8_t *slot_record, const uint8_t *page_buf, int bytes_read)
+        @ int decode_native_tag(uint8_t *slot_record, const uint8_t *page_buf, int bytes_read, void *ctx)
+        mov     r3, r6                  @ arg3: ctx (reader context pointer)
         mov     r2, r0                  @ arg2: bytes_read
         movw    r1, #0x0704             @ arg1: page_buf = 0x20000704
         movt    r1, #0x2000

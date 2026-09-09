@@ -2,16 +2,8 @@
 @
 @ Hooked from the READFAILED(6) exit of the GET_FILAMENT_INFO / FILAMENT_IDENTIFY handler
 @ (0x0800E7A8). Reaching that point means the ISO14443A select SUCCEEDED (so the tag's UID
-@ is already in the caller's scratch buffer at sp+17) but the NTAG page read was refused --
-@ which is what a MIFARE Classic tag (Bambu) does, since this firmware has no MFAuthent path.
-@
-@ Instead of returning READFAILED, report the tag as identified with sku = UID in hex and a
-@ version sentinel the host can recognise. Anycubic tags never reach here; they take the
-@ normal decode path and are unaffected.
-@
-@ Registers: r4 = response struct (must be preserved; the epilogue uses it).
-@            r0-r3, r5 are dead on this path (callee-saved regs are restored by the pop).
-@ Response layout: +4 u16 version, +8 sku[19], +140 u32 code.
+@ is at r8+3 = sp+7) but the NTAG page read was refused -- which is what a MIFARE Classic
+@ tag (Bambu) does, since stock firmware has no MFAuthent path.
 
         .syntax unified
         .thumb
@@ -21,16 +13,17 @@
 uid_stub:
         push    {r4, lr}
         mov     r0, r4              @ arg0: resp struct pointer
-        add.w   r1, sp, #25         @ arg1: UID buffer (was sp+17 before push {r4, lr} = +8)
+        add.w   r1, r8, #3          @ arg1: UID buffer (UID is at select_buf+3 = r8+3)
+        ldr     r2, [r7, #0]        @ arg2: slot index (from request [r7])
         bl      decode_cmd68_uid_tag
         cmp     r0, #1
         beq     .Luid_decoded
 
         @ Tag not recognized as Bambu Lab -> fall back to raw UID hex
         pop     {r4, lr}
-        add.w   r1, sp, #17         @ UID bytes (7) written by the anticollision cascade
+        add.w   r1, r8, #3          @ UID bytes (4 bytes)
         add.w   r2, r4, #8          @ sku field
-        movs    r3, #7
+        movs    r3, #4
 1:
         ldrb    r0, [r1], #1
         lsrs    r5, r0, #4          @ high nibble
@@ -45,11 +38,11 @@ uid_stub:
         addlt   r5, r5, #48
         addge   r5, r5, #55
         strb    r5, [r2], #1
-        subs    r3, r3, #1
+        subs    r3, #1
         bne     1b
 
         movs    r5, #0
-        strb    r5, [r2]            @ NUL terminate (14 chars + NUL fits in sku[19])
+        strb    r5, [r2]            @ NUL terminate (8 chars + NUL)
         movw    r5, #0x0201         @ version sentinel: "this sku is a raw tag UID"
         str     r5, [r4, #4]        @ 32-bit, matching the handler's own store to this field
         movs    r0, #0              @ code = SUCCESS

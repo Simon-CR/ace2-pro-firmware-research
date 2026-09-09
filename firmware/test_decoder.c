@@ -16,7 +16,7 @@ int main() {
     memset(slot, 0, sizeof(slot));
     memset(page_buf, 0, sizeof(page_buf));
     page_buf[0] = 0x7B; page_buf[1] = 0x00; page_buf[2] = 0x65; page_buf[3] = 0x00;
-    int res1 = decode_native_tag(slot, page_buf, 144);
+    int res1 = decode_native_tag(slot, page_buf, 144, NULL);
     assert(res1 == 0); /* Must return 0 so native Anycubic unpack runs */
     printf("[PASS] Test 1: Anycubic native passthrough verified (return 0)\n");
 
@@ -35,7 +35,7 @@ int main() {
         "\"bed_max\":60"
         "}";
     memcpy(page_buf, openspool_payload, strlen(openspool_payload));
-    int res2 = decode_native_tag(slot, page_buf, strlen(openspool_payload));
+    int res2 = decode_native_tag(slot, page_buf, strlen(openspool_payload), NULL);
     assert(res2 == 1);
     assert(slot[OFF_STATUS] == 2);
     assert(strcmp((char *)&slot[OFF_SKU], "SM99") == 0);
@@ -60,7 +60,7 @@ int main() {
     const char *filaman_payload = 
         "{\"filaman\":1,\"sm_id\":24,\"brand\":\"eSUN\",\"type\":\"PETG\",\"color\":\"#FF0055\"}";
     memcpy(page_buf, filaman_payload, strlen(filaman_payload));
-    int res3 = decode_native_tag(slot, page_buf, 144);
+    int res3 = decode_native_tag(slot, page_buf, 144, NULL);
     assert(res3 == 1);
     assert(slot[OFF_STATUS] == 2);
     assert(strcmp((char *)&slot[OFF_SKU], "SM24") == 0);
@@ -77,7 +77,7 @@ int main() {
     memset(page_buf, 0, sizeof(page_buf));
     const char *prusa_payload = "Prusament PC Blend Jet Black #101010";
     memcpy(page_buf, prusa_payload, strlen(prusa_payload));
-    int res4 = decode_native_tag(slot, page_buf, 144);
+    int res4 = decode_native_tag(slot, page_buf, 144, NULL);
     assert(res4 == 1);
     assert(slot[OFF_STATUS] == 2);
     assert(strcmp((char *)&slot[OFF_BRAND], "Prusament") == 0);
@@ -96,7 +96,7 @@ int main() {
     memset(page_buf, 0, sizeof(page_buf));
     const char *creality_payload = "Creality Hyper PLA White #FFFFFF";
     memcpy(page_buf, creality_payload, strlen(creality_payload));
-    int res5 = decode_native_tag(slot, page_buf, 144);
+    int res5 = decode_native_tag(slot, page_buf, 144, NULL);
     assert(res5 == 1);
     assert(slot[OFF_STATUS] == 2);
     assert(strcmp((char *)&slot[OFF_BRAND], "Creality") == 0);
@@ -119,7 +119,7 @@ int main() {
     slot[5] = 0x34;
     slot[6] = 0xFC;
     slot[7] = 0xD2;
-    int res6 = decode_native_tag(slot, page_buf, 0); /* page read failed (0 bytes) */
+    int res6 = decode_native_tag(slot, page_buf, 0, NULL); /* page read failed (0 bytes) */
     assert(res6 == 1);
     assert(slot[OFF_STATUS] == 2);
     assert(*(uint16_t *)&slot[OFF_VERSION] == 0x0102);
@@ -133,7 +133,7 @@ int main() {
     uint8_t resp[144];
     memset(resp, 0, sizeof(resp));
     uint8_t uid[7] = {0x1E, 0xF5, 0xE2, 0x98, 0x91, 0x00, 0x00};
-    int res7 = decode_cmd68_uid_tag(resp, uid);
+    int res7 = decode_cmd68_uid_tag(resp, uid, 3);
     assert(res7 == 1);
     assert(*(uint32_t *)(resp + 4) == 0x0102);
     assert(strcmp((char *)(resp + 8), "SM1EF5E298") == 0);

@@ -45,7 +45,6 @@ SYMS = {
     "rc522_flush": 0x0800F30A,
     "rfid_select": 0x0800DEB6,
     "rfid_pageread": 0x0800E18C,
-    "delay_ms": 0x08013C70,
     "memcpy": 0x08008AA8,
     "resume": 0x0800E846,         # stock cmd 68 positional parse resume
     "cache_resume": 0x0800FE40,   # rawtag_cache_stub resume
@@ -54,7 +53,7 @@ SYMS = {
     "extract_resume": 0x0800FE3A, # rawtag_extract_stub Anycubic/failure resume
     "scan_exit": 0x0800FE98,      # background scan success exit (bypasses Anycubic parse)
 }
-VERSION_STRING = b"V1.1.48O\x00"  # Native on-chip multi-format RFID decoder + dual-grab unlock + Bambu CMD68.
+VERSION_STRING = b"V1.1.60O\x00"  # Production Multi-Format + Bambu RFID
                                # Trailing 'O' ensures multiACE auto-detects open firmware build.
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -105,7 +104,7 @@ def crc16_kermit(data):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", required=True, help="stock ACE2 V1.1.31 .bin (you supply this)")
-    ap.add_argument("--out", default="ACE2-Open-V1.1.48O.bin")
+    ap.add_argument("--out", default="ACE2-Open-V1.1.52O.bin")
     ap.add_argument("--tmp", default=".build")
     ap.add_argument("--force", action="store_true", help="proceed even if the base image is unrecognised")
     args = ap.parse_args()
@@ -134,7 +133,10 @@ def main():
 
     # 2. Link decoder binary as standalone text section at decoder_addr
     decoder_addr = BASE_ADDR + len(body)
-    dec_ld = ("ENTRY(decode_native_tag)\nSECTIONS {\n  . = 0x%08X;\n  .text : { *(.text*) *(.rodata*) }\n}\n" % decoder_addr)
+    dec_ld = "ENTRY(decode_native_tag)\nSECTIONS {\n  . = 0x%08X;\n  .text : { *(.text*) *(.rodata*) }\n" % decoder_addr
+    for k, v in SYMS.items():
+        dec_ld += "  %s = 0x%08X;\n" % (k, v)
+    dec_ld += "}\n"
     open(os.path.join(args.tmp, "dec.ld"), "w").write(dec_ld)
     subprocess.run(["arm-none-eabi-ld", "-T", os.path.join(args.tmp, "dec.ld"),
                     decoder_obj, "-o", os.path.join(args.tmp, "dec.elf"),
@@ -150,7 +152,7 @@ def main():
         parts = line.split()
         if len(parts) == 3:
             addr_str, typ, sym = parts
-            if sym in ("decode_native_tag", "decode_cmd68_tag", "decode_cmd68_uid_tag"):
+            if sym in ("decode_native_tag", "decode_cmd68_tag", "decode_cmd68_uid_tag", "delay_ms"):
                 SYMS[sym] = int(addr_str, 16)
 
     uid_addr = BASE_ADDR + len(body)
