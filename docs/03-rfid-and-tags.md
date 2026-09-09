@@ -53,41 +53,54 @@ So a Bambu tag *selects* fine (that is where its UID comes from) and then NAKs t
 unauthenticated read. That is the `READFAILED (6)` you see. It is not a hardware limit, an
 antenna problem or a positioning problem — it is a missing code path.
 
-## Reading Bambu tags from the ACE
+## Native On-Chip Bambu MIFARE Classic Authentication (V1.1.60O)
 
-With the RC522 passthrough, the host performs the authentication itself and the reader handles
-Crypto1 in silicon. Key derivation is entirely
-[Bambu-Research-Group/RFID-Tag-Guide](https://github.com/Bambu-Research-Group/RFID-Tag-Guide)'s
-work:
+Starting in firmware `V1.1.60O` (commit `9fb5dbe`), Bambu Lab tags are authenticated and decoded **entirely on-chip** on the STM32F103/GD32F303 Cortex-M3 MCU with zero host reliance.
 
-```python
-HKDF(uid, 6, master, SHA256, 16, context=b"RFID-A\0")
-```
+### Autonomous On-Chip Cryptographic Engine
 
-In PyCryptodome's signature `HKDF(ikm, key_len, salt, hash, num_keys, context)` — so **the UID is
-the input keying material and the master key is the salt.** Getting those backwards produces
-completely different keys and fails silently (authentication simply returns with the crypto bit
-clear). We lost hours to exactly that; take the derivation from their source rather than from
-memory.
-
-Result on a real spool (UID `899334FC`):
+A freestanding, zero-heap C and Thumb-2 assembly implementation (`native_tag_decoder.c` / `uid_stub.s`) implements RFC 5869 HKDF-SHA256 directly in SRAM:
 
 ```
-sector 0 KeyA A62EB420CE32  -> Status2 = 0x08 (MFCrypto1On)
-  blk  0  899334fc d2 08 0400 ...        UID, BCC, SAK 08, ATQA 0004
-  blk  1  "G00-K00" / "GFG00"            material variant id + filament id
-  blk  2  "PETG"                         filament type
-sector 1 KeyA EB22C585C318
-  blk  4  "PETG Basic"                   detailed type
-  blk  5  000000ff e8030000 0000e03f     colour RGBA, 1000 g spool,
-                                         diameter 1.75 as an IEEE-754 float
-  blk  6  41 00 08 00 ... 04 01 e6 00    temperatures
-  blk  8  ... cd cc 4c 3e                float 0.2
-  blk 12  "2026_05_02_08_50"             production timestamp
-  blk 14  4a 01 -> 330                   length (m)
+HKDF-Extract(salt=BAMBU_MASTER_KEY, ikm=UID) -> PRK
+HKDF-Expand(PRK, info=b"RFID-A\0", L=96) -> Key Stream (16 sectors x 6 bytes)
 ```
 
-`Status2Reg` bit 3 (`MFCrypto1On`) is the authoritative "the key was right" signal.
+Key derivation stream offsets (6 bytes per sector key):
+- **Sector 0 Key A:** Offset `0..5` -> `2C4E3DBA1935` (for UID `1EF5E298`)
+- **Sector 1 Key A:** Offset `6..11` -> `0CAAB242E8B2` (for UID `1EF5E298`)
+
+### RC522 Hardware Register Timing & Framing Invariants
+
+To execute MIFARE Classic hardware mutual authentication on the MFRC522 transceiver:
+
+1. **Card Selection Cascade Reset (`rfid_select`):** Prior to issuing authentication, standard ISO 14443A cascade level 1 anticollision/SELECT must be executed to transition the card from IDLE/HALT to the ACTIVE state.
+2. **`PCD_MFAuthent` (`0x0E`) Command Execution:**
+   - Command code: `CommandReg (0x01) <- 0x0E`
+   - Authentication mode: `0x60` (Auth-A)
+   - Block address: `0x04` (Sector 1) or `0x00` (Sector 0)
+   - 6-byte derived key loaded into FIFO
+   - 4-byte card UID loaded into FIFO
+3. **CRITICAL Framing Invariant (`TxCRCEn=0` / `RxCRCEn=0`):**
+   - Transmit CRC (`TxModeReg 0x12` bit 7 `TxCRCEn`) MUST be cleared to `0`.
+   - Receive CRC (`RxModeReg 0x13` bit 7 `RxCRCEn`) MUST be cleared to `0`.
+   - *Why:* The RC522 Crypto1 coprocessor handles parity and framing bits internally during the 3-pass mutual authentication handshake. If `TxCRCEn` is enabled, the transmitter appends an extraneous 2-byte CRC_A to the auth payload, immediately causing card framing rejection.
+4. **Hardware State Latch (`MFCrypto1On`):**
+   - Polling `Status2Reg (0x08)` bit 3 (`MFCrypto1On`): When authentication succeeds, bit 3 latches to `1` in silicon.
+5. **Decrypted Payload Extraction:**
+   - With `MFCrypto1On = 1`, standard `PCD_Transceive (0x0C)` with MIFARE `0x30` READ commands and CRC enabled (`TxCRCEn=1`, `RxCRCEn=1`) reads blocks directly through the hardware Crypto1 stream cipher.
+   - **Block 4:** Unpacks detailed material string (e.g. `PLA Translucent`).
+   - **Block 5:** Unpacks physical RGBA color swatch (e.g. `[171, 128, 232, 255]`, hex `#AB80E8`), nominal spool weight (1000g), and filament diameter (1.75mm float).
+   - Populates Nanopb `FilamentInfoResponse` directly into slot SRAM with `version = 0x0102`, `sku = "SM1EF5E298"`, `brand = "Bambu Lab"`, `code = 0` (SUCCESS).
+
+### Live Spool Hardware Ground Truth
+
+Proven on physical spool `1EF5E298` in Slot 3:
+- Sector 0 Key A: `2C4E3DBA1935` -> `Status2 = 0x08 (MFCrypto1On)`
+- Sector 1 Key A: `0CAAB242E8B2` -> `Status2 = 0x08 (MFCrypto1On)`
+  * Block 4: `PLA Translucent`
+  * Block 5: `ab 80 e8 ff e8 03 00 00 00 00 e0 3f` -> RGBA `[171, 128, 232]`, 1000g, 1.75mm
+  * Result: `code = 0` (SUCCESS), `brand = "Bambu Lab"`, `color = "#AB80E8"`
 
 ## Bambu tags are permanently read-only
 

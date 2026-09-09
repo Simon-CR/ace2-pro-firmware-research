@@ -914,6 +914,43 @@ passthrough (`V1.1.3O`). Three were new to us; the fourth sent us back to our ow
   `arg1 = 0..3` returns **page 20** — on an Anycubic tag, the ABGR colour word (`ff 59 d9 f7` on
   ours).
 
+### 8.19 Native On-Chip Bambu Lab MIFARE Classic Mutual Authentication & HKDF Derivation (PROVEN 2026-09-09)
+
+Starting with firmware release `V1.1.60O` (commit `9fb5dbe`), Bambu Lab MIFARE Classic encrypted spool tags are fully decrypted and parsed directly on the Cortex-M3 MCU without host assistance or external RFID sniffers.
+
+#### On-Chip HKDF-SHA256 Derivation Offsets
+
+Key derivation is executed in freestanding C/assembly adhering to RFC 5869:
+
+```
+HKDF-Extract(salt=BAMBU_MASTER_KEY, ikm=4-byte UID) -> PRK (32 bytes)
+HKDF-Expand(PRK, info=b"RFID-A\0", L=96) -> Key Stream (16 sector keys x 6 bytes)
+```
+
+Derived Key Offsets (6 bytes per sector):
+- **Sector 0 Key A:** Bytes `0..5` -> `2C4E3DBA1935` (UID `1EF5E298`)
+- **Sector 1 Key A:** Bytes `6..11` -> `0CAAB242E8B2` (UID `1EF5E298`)
+
+#### RC522 Hardware Register Timing & Framing Invariants
+
+To execute `PCD_MFAuthent` (`CommandReg 0x0E`) on the MFRC522:
+
+1. **Cascade Level 1 Reset:** Execute standard ISO 14443A cascade level 1 anticollision/SELECT (`rfid_select`) prior to authentication to transition the transponder into the ACTIVE state.
+2. **CRITICAL Framing Requirement (`TxCRCEn=0` & `RxCRCEn=0`):**
+   - Transmit CRC (`TxModeReg 0x12` bit 7 `TxCRCEn`) MUST be cleared to `0`.
+   - Receive CRC (`RxModeReg 0x13` bit 7 `RxCRCEn`) MUST be cleared to `0`.
+   - *Physical Ground Truth:* The RC522 hardware Crypto1 coprocessor handles parity and CRC internally during the 3-pass mutual authentication handshake. Appending a transmitter CRC_A causes the card to reject authentication framing.
+3. **`PCD_MFAuthent` Execution:**
+   - Write `CommandReg (0x01) <- 0x0E`
+   - Mode `0x60` (Auth-A), target block address (`0x00` or `0x04`), 6-byte derived key, 4-byte UID.
+4. **Silicon State Latch (`MFCrypto1On`):**
+   - Polling `Status2Reg (0x08)` bit 3 (`MFCrypto1On`): Successful authentication asserts bit 3 high (`Status2Reg = 0x08`).
+5. **Decrypted Block Extraction:**
+   - With `MFCrypto1On = 1`, issue standard MIFARE Read (`0x30`) via `PCD_Transceive` (`0x0C`) with `TxCRCEn=1` and `RxCRCEn=1`.
+   - **Sector 1 Block 4:** Unpacks detailed material subtype (`PLA Translucent`).
+   - **Sector 1 Block 5:** Unpacks physical RGBA color (`[171, 128, 232, 255]`, `#AB80E8`), 1000g nominal weight, and 1.75mm diameter float.
+   - Populates Nanopb `FilamentInfoResponse` in MCU SRAM with `version = 0x0102`, `sku = "SM1EF5E298"`, `brand = "Bambu Lab"`, `code = 0` (SUCCESS).
+
 **Version letters are cosmetic.** `V1.1.3O`, `V1.1.3T`, `V1.1.3W` are all the same base image
 (`ACE2_V1.1.31_20260306`, md5 `79fb22e7914bae1dc75ac91b30739c19`, 71592 bytes) with one byte poked
 at `0x08018C26` in the version string. Hook addresses and helper addresses are identical across
