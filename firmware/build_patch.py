@@ -34,6 +34,8 @@ HOOK_RAWTAG = 0x0800E842     # add.w lr,sp,#140    -- cmd 68's live identificati
 HOOK_RAWCACHE = 0x0800FE3C   # add.w lr,r5,#136    -- the BACKGROUND reader's positional parse.
 HOOK_PAGEREAD = 0x0800E228   # movw r1,#0x704 -- the page-read copy/return epilogue.
 HOOK_EXTRACT = 0x0800FE36    # mov r6,r0 ; cmp r0,#140  -- background worker decode hook.
+HOOK_STATUS = 0x0800B868     # cmp r0, #5 ; str r0, [r2, #8] -- telemetry status hook
+HOOK_DRYROLL_GATE = 0x0800D19C # ldrb r0, [r0, #0] ; cbz r0, 0x800d1c4 -- dryroll gate hook
 
 EPILOGUE = 0x0800E904
 SYMS = {
@@ -52,8 +54,11 @@ SYMS = {
     "pageread_fail": 0x0800E23C,  # "mov r0, sl" -- stock failed-read return
     "extract_resume": 0x0800FE3A, # rawtag_extract_stub Anycubic/failure resume
     "scan_exit": 0x0800FE98,      # background scan success exit (bypasses Anycubic parse)
+    "status_resume": 0x0800B86C,  # stock status resume after hook
+    "status_resume_roll": 0x0800D1A0, # dryroll gate proceed
+    "status_skip_roll": 0x0800D1C4,   # dryroll gate skip roll
 }
-VERSION_STRING = b"V1.1.60O\x00"  # Production Multi-Format + Bambu RFID
+VERSION_STRING = b"V1.1.61O\x00"  # Production Multi-Format + Bambu RFID + Rotisserie Telemetry
                                # Trailing 'O' ensures multiACE auto-detects open firmware build.
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -179,6 +184,19 @@ def main():
     pageread_stub = assemble(os.path.join(HERE, "pageread_gate_stub.s"), pageread_addr, args.tmp)
     body += pageread_stub
 
+    rotisserie_addr = BASE_ADDR + len(body)
+    rotisserie_stub = assemble(os.path.join(HERE, "rotisserie_stub.s"), rotisserie_addr, args.tmp)
+    body += rotisserie_stub
+
+    # Read rotisserie stub symbols from ELF
+    nm_out = subprocess.check_output(["arm-none-eabi-nm", os.path.join(args.tmp, "s.elf")]).decode()
+    for line in nm_out.strip().split("\n"):
+        parts = line.split()
+        if len(parts) == 3:
+            addr_str, typ, sym = parts
+            if sym in ("status_rotisserie_stub", "dryroll_gate_stub"):
+                SYMS[sym] = int(addr_str, 16)
+
     # Hook installations:
     o = HOOK_UID - BASE_ADDR
     if bytes(body[o:o + 4]) != bytes([0x06, 0x20, 0x64, 0xE0]):
@@ -204,6 +222,16 @@ def main():
     if bytes(body[o:o + 4]) != bytes([0x06, 0x46, 0x8c, 0x28]):
         sys.exit("sm_id extract hook site does not match the expected instructions")
     body[o:o + 4] = thumb_bw(HOOK_EXTRACT, extract_addr)
+
+    o = HOOK_STATUS - BASE_ADDR       # cmp r0, #5 (2805) ; str r0, [r2, #8] (6090)
+    if bytes(body[o:o + 4]) != bytes([0x05, 0x28, 0x90, 0x60]):
+        sys.exit("status rotisserie hook site does not match the expected instructions")
+    body[o:o + 4] = thumb_bw(HOOK_STATUS, SYMS["status_rotisserie_stub"])
+
+    o = HOOK_DRYROLL_GATE - BASE_ADDR # ldrb r0, [r0, #0] (7800) ; cbz r0, 0x800d1c4 (b188)
+    if bytes(body[o:o + 4]) != bytes([0x00, 0x78, 0x88, 0xB1]):
+        sys.exit("dryroll gate hook site does not match the expected instructions")
+    body[o:o + 4] = thumb_bw(HOOK_DRYROLL_GATE, SYMS["dryroll_gate_stub"])
 
     # 3-byte extend read pokes:
     for addr, want, new in ((0x0800E220, 0x7C, 0xAC),   # cmp r7,#124 -> #172 : 12 iterations
@@ -281,6 +309,18 @@ def main():
             "expect_hex": "40f20471",
             "replace_hex": bytes(body[HOOK_PAGEREAD - BASE_ADDR:HOOK_PAGEREAD - BASE_ADDR + 4]).hex(),
         },
+        {
+            "file_offset": HOOK_STATUS - BASE_ADDR,
+            "addr": "0x%08X" % HOOK_STATUS,
+            "expect_hex": "05289060",
+            "replace_hex": bytes(body[HOOK_STATUS - BASE_ADDR:HOOK_STATUS - BASE_ADDR + 4]).hex(),
+        },
+        {
+            "file_offset": HOOK_DRYROLL_GATE - BASE_ADDR,
+            "addr": "0x%08X" % HOOK_DRYROLL_GATE,
+            "expect_hex": "007888b1",
+            "replace_hex": bytes(body[HOOK_DRYROLL_GATE - BASE_ADDR:HOOK_DRYROLL_GATE - BASE_ADDR + 4]).hex(),
+        },
     ]
 
     pokes_spec = [
@@ -315,6 +355,7 @@ def main():
     print("cache stub  %4d bytes at 0x%08X" % (len(cache_stub), cache_addr))
     print("extract stub%4d bytes at 0x%08X" % (len(extract_stub), extract_addr))
     print("pageread    %4d bytes at 0x%08X" % (len(pageread_stub), pageread_addr))
+    print("rotisserie  %4d bytes at 0x%08X" % (len(rotisserie_stub), rotisserie_addr))
     print("image       %d bytes, crc16/kermit 0x%04X" % (len(out), crc16_kermit(out)))
     print("magic last 8 bytes: %s  %s" % (out[-8:].hex(), "OK" if out[-8:] == MAGIC else "WRONG"))
     print("reports version: %s" % VERSION_STRING.rstrip(b"\x00").decode("ascii"))

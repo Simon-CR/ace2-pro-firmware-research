@@ -451,3 +451,25 @@ The on-chip decoder is spliced into both firmware scan paths:
 
 When factory Anycubic tags are present, the decoder returns `0` and immediately branches to the untouched OEM Anycubic parser at `0x0800E846`, ensuring 100% factory behavior and zero regression for genuine spools.
 
+---
+
+## V1.1.61O: Rotisserie Telemetry & Motion Yield Interlock Specification
+
+Firmware **V1.1.61O** addresses spool drying rotation telemetry and motion safety interlocks agreed upon with upstream `multiACE` maintainers:
+
+### 1. Dedicated Rotisserie Telemetry Bit in `GET_STATUS` (Command 6)
+In `StatusResponse` -> `DryStatus` (`field 2`):
+- `status` (`uint32` at field 1):
+  - **Bits 0..3 (Low Nibble)**: Preserves base drying machine state (`0: stop`, `1: starting`, `2: keeping`, `3: stopping`, `4: ptc_error`, `5: ntc_error`).
+  - **Bit 7 (`0x80` - `DRY_ROTISSERIE_ACTIVE_BIT`)**: Asserted `1` whenever the MCU is actively executing a rotisserie motor rotation sweep or nudge, or when autonomous spool rotation is running. Asserted `0` when the spool rotation stepper is stationary.
+  - **Bit 6 (`0x40` - `DRY_AUTO_ROLL_ALLOWED_BIT`)**: Asserted `1` when slot state and thermal bounds permit drying rotation; `0` if locked out by active printing or kinematics busy states.
+
+### 2. Backward Compatibility Guarantees
+- **OEM & Existing Clients**: Masking `raw_status & 0x0F` yields identical factory enum values with zero breaking changes.
+- **multiACE & Prism Touch Native**: Inspecting `bool(raw_status & 0x80)` provides real-time, zero-latency visual animation of spool roasting without polling asynchronous Klipper macro states.
+
+### 3. Motion Yield & Print Lockout Interlock
+- **Instant Motion Preemption**: If the host issues a feed or rollback command (`FEED_OR_ROLLBACK` Cmd 8 or 77), the firmware immediately preempts and aborts any active rotisserie rotation step, releases the stepper driver, and services the host feed request without queuing delay.
+- **Hardware Print Lockout**: When `SET_PRINTER_STATUS status=true` (Cmd 20) is asserted, firmware hardware lockouts suppress blind `auto_roll` nudging completely, preventing filament creep and nozzle drag during live printing.
+
+
