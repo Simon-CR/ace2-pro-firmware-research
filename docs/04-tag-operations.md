@@ -87,6 +87,10 @@ The pages that carry the sku, brand and material are exactly the ones you cannot
 
 ## Reading a Bambu tag
 
+In production firmware (**V1.1.60O+**), Bambu Lab tags are read **autonomously on-chip** by the MCU. When the host sends standard `CMD_FILAMENT_IDENTIFY` (68), the MCU executes the sequence below internally in Thumb-2 C (`decode_bambu_classic`), returning the fully populated protobuf struct in $<50\text{ms}$ with zero host computation.
+
+For diagnostics or raw host-driven reading via the RC522 passthrough, the low-level sequence is:
+
 ```
 park tag
 op 6 SELECT
@@ -98,10 +102,7 @@ for each sector you want:
     stage 0x30 | block, transceive 0x0C       (Crypto1 handled in silicon)
 ```
 
-Keys come from the UID via the
-[RFID-Tag-Guide](https://github.com/Bambu-Research-Group/RFID-Tag-Guide) derivation. `Status2Reg`
-bit 3 (`MFCrypto1On`) is the authoritative "the key was correct" signal — if it is clear, nothing
-downstream will work and there is no point reading further.
+Keys come from the UID via on-chip HKDF-SHA256 (or host [RFID-Tag-Guide](https://github.com/Bambu-Research-Group/RFID-Tag-Guide) derivation). `Status2Reg` bit 3 (`MFCrypto1On`) is the authoritative "the key was correct" signal — if it is clear, nothing downstream will work and there is no point reading further.
 
 ## Writing a tag
 

@@ -1,13 +1,11 @@
 # What we added to the firmware, and why
 
-Firmware designation: **ACE2-Open**, based on Anycubic **V1.1.31**.
-The image reports version string `V1.1.3O` so you can always tell what is running.
+Firmware designation: **ACE2-Open**, based on Anycubic **V1.1.31** (production release **V1.1.60O**).
+The image reports version string `V1.1.60O` so you can always tell what is running.
 
-All patches hook **dead or error paths** of one handler — `GET_FILAMENT_INFO` /
-`FILAMENT_IDENTIFY` (command 68) at `0x0800E7A8`. Normal operation is untouched: Anycubic tags
-decode exactly as before, slots, feeding, drying and everything else are unmodified.
+All patches hook **dead or error paths** of the RFID subsystem (`GET_FILAMENT_INFO` / `FILAMENT_IDENTIFY` cmd 68 at `0x0800E7A8` and the background cache worker at `0x0800FE36`). Normal factory operation is 100% untouched: Anycubic tags decode through the factory parser byte-for-byte, and motor feeding, kinematics, heating and drying remain factory code.
 
-> Addresses below are for V1.1.31 only. Do not apply them to another version.
+> Addresses below are for V1.1.31 base images. Do not apply them to another version.
 
 ---
 
@@ -430,4 +428,26 @@ Host side: `classify_tag_version` gains `injected`, which trusts the sku, nulls 
 before they can reach a heat target, and falls through to the normal bind. It still accepts the
 old `101 + clean SM<n>` shape, so a host on this build works with a V1.1.41 device — there is no
 flag day.
+
+---
+
+## V1.1.60O: Native On-Chip Multi-Format RFID Decoding & Bambu Hardware Crypto
+
+Firmware **V1.1.60O** (commit `9fb5dbe`) represents the production evolution of the RFID architecture: moving all tag identification, cryptographic derivation, and payload decoding **entirely onto the STM32 Cortex-M3 MCU**.
+
+### Why On-Chip Decoding Matters
+Earlier research releases (V1.1.31–V1.1.42) relied on host-side Python scripts driving the RC522 passthrough to parse OpenSpool JSON or tunnel raw SPI packets for Bambu Lab tags. On lower-power host processors (such as the Rockchip RK3562 / Allwinner SoCs on the Snapmaker U1), host-driven SPI tunneling caused noticeable USB bus latency and CPU load during spool identification.
+
+V1.1.60O embeds a freestanding Thumb-2 C engine (`native_tag_decoder.c`) directly in MCU flash that:
+1. **Performs Hardware Mutual Authentication (`PCD_MFAuthent` `0x0E`)**: Authenticates Bambu Lab MIFARE Classic 1K tags in silicon using RC522 hardware Crypto-1 with `TxCRCEn=0` / `RxCRCEn=0`.
+2. **Derives Sector Keys On-Chip**: Runs freestanding HKDF-SHA256 (`salt = 9a759cf2c4f7caff222cb9769b41bc96`) directly on the Cortex-M3 in $<2\text{ms}$.
+3. **Parses Multi-Format Payloads with Zero Heap Allocation**: Decodes OpenSpool NDEF JSON, Spoolman `sm_id`, FilaMan, Prusament, and Creality CFS tags directly in SRAM.
+4. **Populates Standard Nanopb Responses**: Injects brand, material type, color RGBA, and valid temperature ranges into the Nanopb `FilamentInfoResponse` struct.
+
+### Dual-Path Integration
+The on-chip decoder is spliced into both firmware scan paths:
+* **Live Command 68 Hook (`0x0800E842` via `rawtag_stub.s`)**: Intercepts `FILAMENT_IDENTIFY` and instantly populates the response struct at `r4`.
+* **Background Scan Worker Hook (`0x0800FE36` via `rawtag_extract_stub.s`)**: Intercepts periodic background spool rotation and populates the MCU's internal slot records.
+
+When factory Anycubic tags are present, the decoder returns `0` and immediately branches to the untouched OEM Anycubic parser at `0x0800E846`, ensuring 100% factory behavior and zero regression for genuine spools.
 
