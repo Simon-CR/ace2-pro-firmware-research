@@ -464,9 +464,13 @@ In `StatusResponse` -> `DryStatus` (`field 2`):
   - **Bit 7 (`0x80` - `DRY_ROTISSERIE_ACTIVE_BIT`)**: Asserted `1` whenever the MCU is actively executing a rotisserie motor rotation sweep or nudge, or when autonomous spool rotation is running. Asserted `0` when the spool rotation stepper is stationary.
   - **Bit 6 (`0x40` - `DRY_AUTO_ROLL_ALLOWED_BIT`)**: Asserted `1` when slot state and thermal bounds permit drying rotation; `0` if locked out by active printing or kinematics busy states.
 
-### 2. Backward Compatibility Guarantees
-- **OEM & Existing Clients**: Masking `raw_status & 0x0F` yields identical factory enum values with zero breaking changes.
+### 2. Backward Compatibility & Host Masking Requirements
+- **Low-Nibble Masking Requirement**: Masking `raw_status & 0x0F` yields identical factory enum values with zero breaking changes for stock status mappers.
 - **multiACE & Prism Touch Native**: Inspecting `bool(raw_status & 0x80)` provides real-time, zero-latency visual animation of spool roasting without polling asynchronous Klipper macro states.
+
+> [!IMPORTANT]
+> **Host-Side Masking Requirement**: Host decoders MUST mask `status & 0x0F` when evaluating the base drying state. Because factory Anycubic firmware never set bits 6 or 7, unmasked clients that map the whole status byte directly to a state lookup table will misinterpret `keeping` (`2`) with `auto_roll_allowed` or `rotisserie_active` set (`0x42` / `0x82`) as unknown states and fall back to `stop`. MultiACE on `dev/main` has implemented low-nibble masking ahead of V1.1.61O flashing.
+
 
 ### 3. Motion Yield & Print Lockout Interlock
 - **Instant Motion Preemption**: If the host issues a feed or rollback command (`FEED_OR_ROLLBACK` Cmd 8 or 77), the firmware immediately preempts and aborts any active rotisserie rotation step, releases the stepper driver, and services the host feed request without queuing delay.
