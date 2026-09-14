@@ -7,7 +7,7 @@
         .thumb_func
 
 status_rotisserie_stub:
-        push    {r1, r3, lr}
+        push    {r1, r3}
         and     r3, r0, #0x0F
         movw    r1, #0x061c
         movt    r1, #0x2000
@@ -24,7 +24,8 @@ status_rotisserie_stub:
 .Lstatus_store:
         cmp     r0, #5
         str     r0, [r2, #8]
-        pop     {r1, r3, pc}
+        pop     {r1, r3}
+        b.w     status_resume
 
 dryroll_gate_stub:
         ldrb    r0, [r0, #0]

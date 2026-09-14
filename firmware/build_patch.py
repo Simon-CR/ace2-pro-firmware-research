@@ -58,7 +58,7 @@ SYMS = {
     "status_resume_roll": 0x0800D1A0, # dryroll gate proceed
     "status_skip_roll": 0x0800D1C4,   # dryroll gate skip roll
 }
-VERSION_STRING = b"V1.1.61O\x00"  # Production Multi-Format + Bambu RFID + Rotisserie Telemetry
+VERSION_STRING = b"V1.1.62O\x00"  # Production Multi-Format + Bambu RFID + Rotisserie Telemetry
                                # Trailing 'O' ensures multiACE auto-detects open firmware build.
 
 HERE = os.path.dirname(os.path.abspath(__file__))
