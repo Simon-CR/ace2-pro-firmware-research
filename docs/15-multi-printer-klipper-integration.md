@@ -240,3 +240,33 @@ To ensure robust operation across diverse Klipper kinematics and single-extruder
 4. **Zero-Load Web UI & Rotisserie Enhancements**:
    - The multiACE web UI provides complete management for empty/unloaded slots, manual feed/rollback buttons, and slot configuration cards even when no filament is present at the toolhead.
    - Includes first-class controls for spool drying rotation (`ROTISSERIE_SWEEP` and `ROTISSERIE_SPIN`), allowing filament drying without false jam alerts or unintended advancement into the multi-material hub.
+
+---
+
+## 7. Snapmaker U1 OpenRFID & OpenSpool Tag Handling Integration (2026-09-15)
+
+In multi-printer setups featuring the Snapmaker U1 alongside Voron Trident appliances, tag handling and material identification must coordinate across vendor boundary layers. On 2026-09-15, direct integration between OpenRFID, Spoolman, and NTAG215 OpenSpool tags was established on `snapmaker.scr.internal`:
+
+### 7.1 OpenRFID OpenSpool NDEF Processor Activation
+* **Configuration:** Enabled `[spoolease_tag_processor]` in `/oem/printer_data/config/extended/openrfid_user.cfg`.
+* **Payload Interpretation:** Allows OpenRFID to parse standard NTAG215 OpenSpool NDEF records directly on the embedded host, extracting material descriptions, color hex codes, and spool IDs.
+
+### 7.2 Material Taxonomy Patch (`valid_materials.py`)
+* **Exception:** Third-party slicers and spool generators frequently encode composite designations like `PLA-PLUS` or `PLA+`. OpenRFID's stock taxonomy rejected these with:
+  ```python
+  ValueError: Invalid filament type: PLA-PLUS
+  ```
+* **Patch:** Extended `VALID_BASE_MATERIALS` in `/usr/local/share/openrfid/filament/valid_materials.py` to include `PLA-PLUS` and `PLA+`, aliasing them into the base PLA thermal envelope and feed rates.
+* **Rootfs Persistence (`/oem/.debug`):** Because the U1 utilizes an overlayfs root filesystem that discards `/usr` modifications on reboot, touching `/oem/.debug` signals the boot scripts to persist rootfs changes across reboots.
+
+### 7.3 Multi-Channel RFID Physical Coupling & Alignment Diagnostics
+* **Symptom (`wakeup err -20`):** During initial tag read cycles, Channel 3 returned persistent `wakeup err -20` faults.
+* **Empirical Diagnostic:** Verified as an inductive RF coupling geometry issue. Variations in spool flange thickness and coil offset at the cradle bottom reduce the field strength below the reader threshold. It is not an I2C or driver failure. Tag repositioning or manual binding resolves the issue.
+
+### 7.4 Extruder Load Feeding Stall vs. Encoder Truth
+* **Symptom:** `extruder[3]: state: load_feeding, error: wheel_speed!raw msg:logic error!`.
+* **Diagnostic Fact:** The U1 feeder supervisor asserts this error when dual encoder pulse increments remain $< 1$ count during the `_hang_neutral` feed phase. This is an empirical physical feed stall (motor slip or Bowden friction bind) rather than an electrical fault.
+
+### 7.5 Slicer Prime Tower Invariant
+* **OrcaSlicer Rule:** `flush_into_infill` does not eliminate the necessity of a prime tower; `enable_prime_tower = true` is strictly required. True minimum physical prime volume is **10–15 mm³** to stabilize nozzle backpressure after filament swap.
+
