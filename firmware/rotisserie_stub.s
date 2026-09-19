@@ -8,7 +8,7 @@
 
 status_rotisserie_stub:
         push    {r1, r3}
-        and     r3, r0, #0x0F
+        mov     r3, r0
         movw    r1, #0x061c
         movt    r1, #0x2000
         ldrb    r1, [r1, #0]
@@ -17,13 +17,14 @@ status_rotisserie_stub:
         movt    r1, #0x2000
         ldrb    r1, [r1, #0]
         cbnz    r1, .Lstatus_store
-        orr     r0, r0, #0x40
-        cmp     r3, #2
+        orr     r3, r3, #0x40
+        and     r1, r0, #0x0F
+        cmp     r1, #2
         bne     .Lstatus_store
-        orr     r0, r0, #0x80
+        orr     r3, r3, #0x80
 .Lstatus_store:
         cmp     r0, #5
-        str     r0, [r2, #8]
+        str     r3, [r2, #8]
         pop     {r1, r3}
         b.w     status_resume
 
