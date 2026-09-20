@@ -148,6 +148,20 @@ int main() {
     printf("[PASS] Test 7: CMD 68 Bambu UID decoder verified (SKU=%s, Type=%s, Version=0x%04X)\n",
            (char *)(resp + 8), (char *)(resp + 28), *(uint32_t *)(resp + 4));
 
-    printf("\n>>> ALL 7 TAG DECODER SUITES PASSED VERIFICATION <<<\n");
+    /* Test 8: CMD 68 Sentinel 7-byte UID fallback */
+    memset(resp, 0, sizeof(resp));
+    /* Real NTAG UID trace from stock select_buf: 88 53 E9 80 <B2> F4 62 00 01 */
+    uint8_t uid7[9] = {0x88, 0x53, 0xE9, 0x80, 0xB2, 0xF4, 0x62, 0x00, 0x01};
+    int res8 = decode_cmd68_uid_tag(resp, uid7, 3);
+    assert(res8 == 1);
+    printf("DEBUG VERSION: 0x%04X\n", *(uint32_t *)(resp + 4));
+    fflush(stdout);
+    assert(*(uint32_t *)(resp + 4) == 0x0201); // Version sentinel for raw UID
+    printf("DEBUG SKU: '%s'\n", (char *)(resp + 8));
+    assert(strcmp((char *)(resp + 8), "53E980F4620001") == 0); // Correctly stripped BCC and extracted 14 hex chars
+    printf("[PASS] Test 8: CMD 68 Sentinel 7-byte UID verified (SKU=%s, Version=0x%04X)\n",
+           (char *)(resp + 8), *(uint32_t *)(resp + 4));
+
+    printf("\n>>> ALL 8 TAG DECODER SUITES PASSED VERIFICATION <<<\n");
     return 0;
 }

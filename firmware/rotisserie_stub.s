@@ -3,7 +3,6 @@
         .thumb
         .text
         .global status_rotisserie_stub
-        .global dryroll_gate_stub
         .thumb_func
 
 status_rotisserie_stub:
@@ -28,17 +27,4 @@ status_rotisserie_stub:
         pop     {r1, r3}
         b.w     status_resume
 
-dryroll_gate_stub:
-        ldrb    r0, [r0, #0]
-        cbz     r0, .Lgate_skip
-        push    {r1}
-        movw    r1, #0x0098
-        movt    r1, #0x2000
-        ldrb    r1, [r1, #0]
-        cbnz    r1, .Lgate_skip_pop
-        pop     {r1}
-        b.w     status_resume_roll
-.Lgate_skip_pop:
-        pop     {r1}
-.Lgate_skip:
-        b.w     status_skip_roll
+

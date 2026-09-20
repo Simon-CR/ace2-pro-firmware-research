@@ -58,7 +58,7 @@ SYMS = {
     "status_resume_roll": 0x0800D1A0, # dryroll gate proceed
     "status_skip_roll": 0x0800D1C4,   # dryroll gate skip roll
 }
-VERSION_STRING = b"V1.1.62O\x00"  # Production Multi-Format + Bambu RFID + Rotisserie Telemetry
+VERSION_STRING = b"V1.1.63O\x00"  # Production Multi-Format + Bambu RFID + Rotisserie Telemetry
                                # Trailing 'O' ensures multiACE auto-detects open firmware build.
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -194,7 +194,7 @@ def main():
         parts = line.split()
         if len(parts) == 3:
             addr_str, typ, sym = parts
-            if sym in ("status_rotisserie_stub", "dryroll_gate_stub"):
+            if sym in ("status_rotisserie_stub",):
                 SYMS[sym] = int(addr_str, 16)
 
     # Hook installations:
@@ -227,11 +227,6 @@ def main():
     if bytes(body[o:o + 4]) != bytes([0x05, 0x28, 0x90, 0x60]):
         sys.exit("status rotisserie hook site does not match the expected instructions")
     body[o:o + 4] = thumb_bw(HOOK_STATUS, SYMS["status_rotisserie_stub"])
-
-    o = HOOK_DRYROLL_GATE - BASE_ADDR # ldrb r0, [r0, #0] (7800) ; cbz r0, 0x800d1c4 (b188)
-    if bytes(body[o:o + 4]) != bytes([0x00, 0x78, 0x88, 0xB1]):
-        sys.exit("dryroll gate hook site does not match the expected instructions")
-    body[o:o + 4] = thumb_bw(HOOK_DRYROLL_GATE, SYMS["dryroll_gate_stub"])
 
     # 3-byte extend read pokes:
     for addr, want, new in ((0x0800E220, 0x7C, 0xAC),   # cmp r7,#124 -> #172 : 12 iterations
@@ -314,12 +309,6 @@ def main():
             "addr": "0x%08X" % HOOK_STATUS,
             "expect_hex": "05289060",
             "replace_hex": bytes(body[HOOK_STATUS - BASE_ADDR:HOOK_STATUS - BASE_ADDR + 4]).hex(),
-        },
-        {
-            "file_offset": HOOK_DRYROLL_GATE - BASE_ADDR,
-            "addr": "0x%08X" % HOOK_DRYROLL_GATE,
-            "expect_hex": "007888b1",
-            "replace_hex": bytes(body[HOOK_DRYROLL_GATE - BASE_ADDR:HOOK_DRYROLL_GATE - BASE_ADDR + 4]).hex(),
         },
     ]
 

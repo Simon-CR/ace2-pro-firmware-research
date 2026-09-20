@@ -611,6 +611,7 @@ static int decode_bambu_classic(decoded_tag_t *tag, const uint8_t *uid, void *re
     uint8_t bcc = uid[4];
 
     if ((u0 | u1 | u2 | u3) == 0) return 0;
+    if (u0 == 0x88) return 0; // 0x88 is the ISO14443A Cascade Tag, so this is an NTAG (7+ bytes), not a Bambu MIFARE Classic!
     if ((u0 ^ u1 ^ u2 ^ u3) != bcc) return 0;
 
     str_copy(tag->brand, "Bambu Lab", 20);
@@ -1160,5 +1161,56 @@ int decode_cmd68_uid_tag(uint8_t *resp, const uint8_t *uid, int slot) {
 
         return 1;
     }
-    return 0;
+
+    // --- FALLBACK: RAW UID SENTINEL ---
+    *(uint32_t *)(resp + 4) = 0x0201; // Version sentinel
+    char *sku = (char *)(resp + 8);
+    static const char hex_chars[] = "0123456789ABCDEF";
+    int out_idx = 0;
+
+#if defined(__arm__) || defined(__thumb__)
+    const uint8_t *real_uid = uid;
+    // If we successfully re-selected the tag, prefer our fresh select_buf which may have CL2 intact
+    if (ctx && readerObj && sel_res >= 0) {
+        // re-declaration of select_buf from earlier scope is tricky, let's just use the original uid pointer 
+        // since stock firmware select_buf at r8+3 already contains the CL1 (and CL2 if executed).
+        // Actually, the stock r8+3 buffer is guaranteed to contain what stock rfid_select saw.
+    }
+#endif
+
+    if (uid[0] == 0x88) {
+        // 7-byte tag detected (Cascade Tag 0x88)
+        uint8_t uid7[7];
+        uid7[0] = uid[1];
+        uid7[1] = uid[2];
+        uid7[2] = uid[3];
+        
+        // Check if BCC1 is present at uid[4]
+        if (uid[4] == (0x88 ^ uid[1] ^ uid[2] ^ uid[3])) {
+            // Raw layout: 88 U0 U1 U2 BCC1 U3 U4 U5 U6
+            uid7[3] = uid[5];
+            uid7[4] = uid[6];
+            uid7[5] = uid[7];
+            uid7[6] = uid[8];
+        } else {
+            // Stripped layout: 88 U0 U1 U2 U3 U4 U5 U6
+            uid7[3] = uid[4];
+            uid7[4] = uid[5];
+            uid7[5] = uid[6];
+            uid7[6] = uid[7];
+        }
+        
+        for (int i = 0; i < 7; i++) {
+            sku[out_idx++] = hex_chars[(uid7[i] >> 4) & 0xF];
+            sku[out_idx++] = hex_chars[uid7[i] & 0xF];
+        }
+    } else {
+        // Standard 4-byte UID or unrecognized
+        for (int i = 0; i < 4; i++) {
+            sku[out_idx++] = hex_chars[(uid[i] >> 4) & 0xF];
+            sku[out_idx++] = hex_chars[uid[i] & 0xF];
+        }
+    }
+    sku[out_idx] = '\0';
+    return 1;
 }
